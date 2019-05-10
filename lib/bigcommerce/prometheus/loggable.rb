@@ -17,6 +17,9 @@
 #
 module Bigcommerce
   module Prometheus
+    ##
+    # Module for logging support
+    #
     module Loggable
       ##
       # @return [::Logger]

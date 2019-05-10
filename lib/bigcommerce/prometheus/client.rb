@@ -36,4 +36,3 @@ module Bigcommerce
     end
   end
 end
-
