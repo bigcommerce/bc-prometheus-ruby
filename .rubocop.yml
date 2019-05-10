@@ -1,0 +1,19 @@
+AllCops:
+  TargetRubyVersion: 2.4
+  Exclude:
+    - spec/**/*
+    - .bundle/**/*
+    - bin/**/*
+    - vendor/**/*
+    - tmp/**/*
+    - log/**/*
+    - Rakefile
+    - bc-prometheus-ruby.gemspec
+
+# Allow *VALID_CONFIG_KEYS.keys
+Lint/AmbiguousOperator:
+  Enabled: false
+
+# This cop conflicts with other cops
+Metrics/LineLength:
+  Enabled: false
