@@ -31,7 +31,6 @@ module Bigcommerce
           end
 
           Rails.application.middleware.unshift PrometheusExporter::Middleware
-          PrometheusExporter::Instrumentation::Process.start(type: 'master')
         end
       end
     end

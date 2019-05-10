@@ -27,6 +27,7 @@ module Bigcommerce
         client_max_queue_size: 10_000,
         client_thread_sleep: 0.5,
         puma_collection_frequency: 30,
+        puma_process_label: 'web',
         server_host: '0.0.0.0',
         server_port: PrometheusExporter::DEFAULT_PORT
       }.freeze

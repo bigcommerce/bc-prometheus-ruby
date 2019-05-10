@@ -26,6 +26,7 @@ module Bigcommerce
         # Start the puma collector
         #
         def self.start
+          ::PrometheusExporter::Instrumentation::Process.start(type: ::Bigcommerce::Prometheus.puma_process_label)
           ::PrometheusExporter::Instrumentation::Puma.start(
             client: ::Bigcommerce::Prometheus.client,
             frequency: ::Bigcommerce::Prometheus.puma_collection_frequency
