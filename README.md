@@ -14,6 +14,18 @@ Then in your `application.rb`, prior to extending `Rails::Application` or any in
 require 'bigcommerce/prometheus'
 ```
 
+You can then view your metrics at: http://0.0.0.0:9394/metrics
+
+## Puma
+
+For extra Puma metrics, add this to `config/puma.rb`:
+
+```ruby
+after_worker_fork do
+  ::Bigcommerce::Prometheus::Integrations::Puma.start
+end
+```
+
 ## Configuration
 
 After requiring the main file, you can further configure with:
