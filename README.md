@@ -1,6 +1,6 @@
 # bc-prometheus-ruby - Drop-in Prometheus metrics
 
-[![CircleCI](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby/tree/master.svg?style=svg)](https://circleci.com/gh/bigcommerce/gruf-lightstep/tree/master) [![Gem Version](https://badge.fury.io/rb/gruf-lightstep.svg)](https://badge.fury.io/rb/gruf-lightstep) [![Inline docs](http://inch-ci.org/github/bigcommerce/bc-prometheus-ruby.svg?branch=master)](http://inch-ci.org/github/bigcommerce/bc-prometheus-ruby)
+[![CircleCI](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby/tree/master.svg?style=svg)](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby/tree/master)
 
 ## Installation
 
