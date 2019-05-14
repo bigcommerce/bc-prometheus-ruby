@@ -26,10 +26,13 @@ module Bigcommerce
         client_custom_labels: nil,
         client_max_queue_size: 10_000,
         client_thread_sleep: 0.5,
+        enabled: true,
         puma_collection_frequency: 30,
         puma_process_label: 'web',
         server_host: '0.0.0.0',
-        server_port: PrometheusExporter::DEFAULT_PORT
+        server_port: PrometheusExporter::DEFAULT_PORT,
+        server_timeout: PrometheusExporter::DEFAULT_TIMEOUT,
+        server_prefix: PrometheusExporter::DEFAULT_PREFIX
       }.freeze
 
       attr_accessor *VALID_CONFIG_KEYS.keys
@@ -79,8 +82,10 @@ module Bigcommerce
           require 'logger'
           self.logger = ::Logger.new(STDOUT)
         end
+        self.enabled = ENV.fetch('PROMETHEUS_ENABLED', 1).to_i.positive?
         self.server_host = ENV.fetch('PROMETHEUS_SERVER_HOST', '0.0.0.0').to_s
         self.server_port = ENV.fetch('PROMETHEUS_SERVER_PORT', PrometheusExporter::DEFAULT_PORT).to_i
+
         self.puma_process_label = ENV.fetch('PROMETHEUS_PUMA_PROCESS_LABEL', 'web').to_s
         self.puma_collection_frequency = ENV.fetch('PROMETHEUS_PUMA_COLLECTION_FREQUENCY', 30).to_i
       end

@@ -24,17 +24,29 @@ module Bigcommerce
       include Loggable
 
       ##
-      # @param [Hash] options
+      # @param [Integer] port
+      # @param [Integer] timeout
+      # @param [String] prefix
+      # @param [Boolean] verbose
       #
-      def start(options: nil)
-        options ||= {}
-        options = {
-          timeout: ::PrometheusExporter::DEFAULT_TIMEOUT,
-          port: ::PrometheusExporter::DEFAULT_PORT
-        }.merge(options)
+      def initialize(port: nil, timeout: nil, prefix: nil, verbose: false)
+        @port = (port || ::PrometheusExporter::DEFAULT_PORT).to_i
+        @timeout = (timeout || ::PrometheusExporter::DEFAULT_TIMEOUT).to_i
+        @prefix = (prefix || ::PrometheusExporter::DEFAULT_PREFIX).to_s
+        @verbose = verbose
+      end
 
-        runner = ::PrometheusExporter::Server::Runner.new(options)
-        logger.info "[bigcommerce-prometheus] Starting prometheus exporter on port #{runner.port}"
+      ##
+      # Start the server
+      #
+      def start
+        runner = ::PrometheusExporter::Server::Runner.new(
+          timeout: @timeout,
+          port: @port,
+          prefix: @prefix,
+          verbose: @verbose
+        )
+        logger.info "[bigcommerce-prometheus] Starting prometheus exporter on port #{@port}"
         runner.start
       end
     end

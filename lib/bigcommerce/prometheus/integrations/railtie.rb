@@ -22,15 +22,28 @@ module Bigcommerce
       # Railtie for automatic configuration of Rails environments
       #
       class Railtie < ::Rails::Railtie
-        initializer 'bigcommerce.prometheus.configure_rails_initialization' do
-          Bigcommerce::Prometheus.logger.debug '[bigcommerce-prometheus] Loading railtie'
+        initializer 'zzz_bigcommerce.prometheus.configure_rails_initialization' do |app|
+          if Bigcommerce::Prometheus.enabled
+            Bigcommerce::Prometheus.logger.debug '[bigcommerce-prometheus] Loading railtie'
 
-          Rails.application.config.before_fork_callbacks = [] unless Rails.application.config.before_fork_callbacks
-          Rails.application.config.before_fork_callbacks << lambda do
-            ::Bigcommerce::Prometheus::Server.new.start
+            app.config.before_fork_callbacks = [] unless Rails.application.config.before_fork_callbacks
+            app.config.before_fork_callbacks << lambda do
+              ::Bigcommerce::Prometheus::Server.new(
+                port: Bigcommerce::Prometheus.server_port,
+                timeout: Bigcommerce::Prometheus.server_timeout,
+                prefix: Bigcommerce::Prometheus.server_prefix
+              ).start
+            end
+
+            app.config.after_fork_callbacks = [] unless Rails.application.config.after_fork_callbacks
+            app.config.after_fork_callbacks << lambda do
+              ::Bigcommerce::Prometheus::Integrations::Puma.start
+            end
+
+            app.middleware.unshift(PrometheusExporter::Middleware, client: Bigcommerce::Prometheus.client)
+          else
+            Rails.logger.info '[bigcommerce-prometheus] Prometheus disabled, skipping...'
           end
-
-          Rails.application.middleware.unshift PrometheusExporter::Middleware
         end
       end
     end
