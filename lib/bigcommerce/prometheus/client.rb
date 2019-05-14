@@ -26,7 +26,7 @@ module Bigcommerce
       def initialize
         super(
           host: Bigcommerce::Prometheus.server_host,
-          port: PrometheusExporter::DEFAULT_PORT,
+          port: Bigcommerce::Prometheus.server_port,
           max_queue_size: Bigcommerce::Prometheus.client_max_queue_size,
           thread_sleep: Bigcommerce::Prometheus.client_thread_sleep,
           custom_labels: Bigcommerce::Prometheus.client_custom_labels

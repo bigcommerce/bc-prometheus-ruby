@@ -79,6 +79,10 @@ module Bigcommerce
           require 'logger'
           self.logger = ::Logger.new(STDOUT)
         end
+        self.server_host = ENV.fetch('PROMETHEUS_SERVER_HOST', '0.0.0.0').to_s
+        self.server_port = ENV.fetch('PROMETHEUS_SERVER_PORT', PrometheusExporter::DEFAULT_PORT).to_i
+        self.puma_process_label = ENV.fetch('PROMETHEUS_PUMA_PROCESS_LABEL', 'web').to_s
+        self.puma_collection_frequency = ENV.fetch('PROMETHEUS_PUMA_COLLECTION_FREQUENCY', 30).to_i
       end
 
       ##
