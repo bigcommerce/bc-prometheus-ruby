@@ -22,7 +22,7 @@ For extra Puma metrics, add this to `config/puma.rb`:
 
 ```ruby
 after_worker_fork do
-  ::Bigcommerce::Prometheus::Integrations::Puma.start
+  Rails.application.config.after_fork_callbacks.each(&:call)
 end
 ```
 
