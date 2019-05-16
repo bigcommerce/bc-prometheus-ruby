@@ -23,27 +23,7 @@ module Bigcommerce
       #
       class Railtie < ::Rails::Railtie
         initializer 'zzz_bigcommerce.prometheus.configure_rails_initialization' do |app|
-          if Bigcommerce::Prometheus.enabled
-            Bigcommerce::Prometheus.logger.debug '[bigcommerce-prometheus] Loading railtie'
-
-            app.config.before_fork_callbacks = [] unless Rails.application.config.before_fork_callbacks
-            app.config.before_fork_callbacks << lambda do
-              ::Bigcommerce::Prometheus::Server.new(
-                port: Bigcommerce::Prometheus.server_port,
-                timeout: Bigcommerce::Prometheus.server_timeout,
-                prefix: Bigcommerce::Prometheus.server_prefix
-              ).start
-            end
-
-            app.config.after_fork_callbacks = [] unless Rails.application.config.after_fork_callbacks
-            app.config.after_fork_callbacks << lambda do
-              ::Bigcommerce::Prometheus::Integrations::Puma.start
-            end
-
-            app.middleware.unshift(PrometheusExporter::Middleware, client: Bigcommerce::Prometheus.client)
-          else
-            Rails.logger.info '[bigcommerce-prometheus] Prometheus disabled, skipping...'
-          end
+          Bigcommerce::Prometheus::Instrumentors::Web.new(app: app).start
         end
       end
     end

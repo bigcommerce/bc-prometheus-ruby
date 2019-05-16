@@ -27,6 +27,7 @@ require_relative 'prometheus/configuration'
 require_relative 'prometheus/server'
 require_relative 'prometheus/client'
 
+require_relative 'prometheus/instrumentors/web'
 require_relative 'prometheus/integrations/railtie' if defined?(Rails)
 require_relative 'prometheus/integrations/puma'
 
