@@ -42,9 +42,11 @@ module Bigcommerce
           end
 
           logger.info "[bigcommerce-prometheus] Starting exporter on port #{@server_port} with timeout #{@server_timeout}"
-          server.start
+          setup_before_fork
           setup_after_fork
           setup_middleware
+        rescue StandardError => e
+          logger.error "[bigcommerce-prometheus] Failed to start web instrumentation - #{e.message} - #{e.backtrace[0..4].join("\n")}"
         end
 
         private
@@ -55,6 +57,13 @@ module Bigcommerce
             timeout: @server_timeout,
             prefix: @server_prefix
           )
+        end
+
+        def setup_before_fork
+          @app.config.before_fork_callbacks = [] unless @app.config.before_fork_callbacks
+          @app.config.before_fork_callbacks << lambda do
+            server.start
+          end
         end
 
         def setup_after_fork

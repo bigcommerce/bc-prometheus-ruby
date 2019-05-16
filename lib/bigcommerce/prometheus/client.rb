@@ -22,6 +22,7 @@ module Bigcommerce
     #
     class Client < ::PrometheusExporter::Client
       include Singleton
+      include Loggable
 
       def initialize
         super(
@@ -32,6 +33,23 @@ module Bigcommerce
           custom_labels: Bigcommerce::Prometheus.client_custom_labels
         )
         PrometheusExporter::Client.default = self
+      end
+
+      ##
+      # Patch the worker loop to make it more resilient
+      #
+      def worker_loop
+        close_socket_if_old!
+        process_queue
+      rescue StandardError => e
+        logger.warn "Prometheus Exporter, failed to send message #{e} - #{e.backtrace[0..5].join("\n")}"
+      end
+
+      ##
+      # Patch the close socket command to handle when @socket_started is nil
+      #
+      def close_socket_if_old!
+        close_socket! if @socket && ((@socket_started.to_i + MAX_SOCKET_AGE) < Time.now.to_f)
       end
     end
   end
