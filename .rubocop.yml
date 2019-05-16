@@ -9,6 +9,7 @@ AllCops:
     - log/**/*
     - Rakefile
     - bc-prometheus-ruby.gemspec
+    - lib/bigcommerce/prometheus/configuration.rb
 
 # Allow *VALID_CONFIG_KEYS.keys
 Lint/AmbiguousOperator:
