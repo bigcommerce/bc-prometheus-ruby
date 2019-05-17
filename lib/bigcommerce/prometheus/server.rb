@@ -75,7 +75,32 @@ module Bigcommerce
         @running
       end
 
+      ##
+      # Add a type collector to this server
+      #
+      # @param [PrometheusExporter::Server::TypeCollector] collector
+      #
+      def add_type_collector(collector)
+        runner.type_collectors = runner.type_collectors.push(collector)
+      end
+
       private
+
+      ##
+      # @return [::PrometheusExporter::Server::Runner]
+      # 
+      def runner
+        unless @runner
+          @runner = ::PrometheusExporter::Server::Runner.new(
+            timeout: @timeout,
+            port: @port,
+            prefix: @prefix,
+            verbose: @verbose
+          )
+          PrometheusExporter::Metric::Base.default_prefix = @runner.prefix
+        end
+        @runner
+      end
 
       ##
       # Register signal handlers
@@ -89,13 +114,6 @@ module Bigcommerce
 
       def server
         @server ||= begin
-          runner = ::PrometheusExporter::Server::Runner.new(
-            timeout: @timeout,
-            port: @port,
-            prefix: @prefix,
-            verbose: @verbose
-          )
-          PrometheusExporter::Metric::Base.default_prefix = runner.prefix
           runner.send(:register_type_collectors)
           runner.server_class.new(
             port: runner.port,

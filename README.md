@@ -26,6 +26,15 @@ after_worker_fork do
 end
 ```
 
+## Resque
+
+In your `task 'resque:setup'` rake task, do: 
+
+```ruby
+require 'bigcommerce/prometheus'
+Bigcommerce::Prometheus::Instrumentors::Resque.new(app: Rails.application).start
+```
+
 ## Configuration
 
 After requiring the main file, you can further configure with:

@@ -15,37 +15,27 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-require 'prometheus_exporter'
-require 'prometheus_exporter/server'
-require 'prometheus_exporter/client'
-require 'prometheus_exporter/middleware'
-require 'prometheus_exporter/instrumentation'
-
-require_relative 'prometheus/version'
-require_relative 'prometheus/loggable'
-require_relative 'prometheus/configuration'
-require_relative 'prometheus/server'
-require_relative 'prometheus/client'
-
-require_relative 'prometheus/collectors/resque'
-require_relative 'prometheus/type_collectors/resque'
-
-require_relative 'prometheus/instrumentors/web'
-require_relative 'prometheus/instrumentors/hutch'
-require_relative 'prometheus/instrumentors/resque'
-require_relative 'prometheus/integrations/railtie' if defined?(Rails)
-require_relative 'prometheus/integrations/puma'
-require_relative 'prometheus/integrations/resque'
-
 module Bigcommerce
-  ##
-  # Base top-level prometheus module
-  #
   module Prometheus
-    extend Configuration
-
-    def self.client
-      Client.instance
+    module Integrations
+      ##
+      # Plugin for resque
+      #
+      class Resque
+        ##
+        # Start the resque integration
+        #
+        def self.start
+          ::PrometheusExporter::Instrumentation::Process.start(
+            client: ::Bigcommerce::Prometheus.client,
+            type: ::Bigcommerce::Prometheus.resque_process_label
+          )
+          ::Bigcommerce::Prometheus::Collectors::Resque.start(
+            client: ::Bigcommerce::Prometheus.client,
+            frequency: ::Bigcommerce::Prometheus.resque_collection_frequency
+          )
+        end
+      end
     end
   end
 end

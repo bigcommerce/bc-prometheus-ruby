@@ -29,6 +29,8 @@ module Bigcommerce
         enabled: true,
         puma_collection_frequency: 30,
         puma_process_label: 'web',
+        resque_collection_frequency: 30,
+        resque_process_label: 'resque',
         server_host: '0.0.0.0',
         server_port: PrometheusExporter::DEFAULT_PORT,
         server_timeout: PrometheusExporter::DEFAULT_TIMEOUT,
