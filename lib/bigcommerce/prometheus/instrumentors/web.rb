@@ -30,6 +30,7 @@ module Bigcommerce
           @server_port = Bigcommerce::Prometheus.server_port
           @server_timeout = Bigcommerce::Prometheus.server_timeout
           @server_prefix = Bigcommerce::Prometheus.server_prefix
+          @process_name = Bigcommerce::Prometheus.process_name
         end
 
         ##
@@ -37,16 +38,15 @@ module Bigcommerce
         #
         def start
           unless @enabled
-            logger.debug '[bigcommerce-prometheus] Prometheus disabled, skipping web start...'
+            logger.debug "[bigcommerce-prometheus][#{@process_name}] Prometheus disabled, skipping web start..."
             return
           end
 
-          logger.info "[bigcommerce-prometheus] Starting exporter on port #{@server_port} with timeout #{@server_timeout}"
           setup_before_fork
           setup_after_fork
           setup_middleware
         rescue StandardError => e
-          logger.error "[bigcommerce-prometheus] Failed to start web instrumentation - #{e.message} - #{e.backtrace[0..4].join("\n")}"
+          logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to start web instrumentation - #{e.message} - #{e.backtrace[0..4].join("\n")}"
         end
 
         private

@@ -41,7 +41,11 @@ module Bigcommerce
       # Whenever this is extended into a class, setup the defaults
       #
       def self.extended(base)
-        base.reset
+        if defined?(Rails)
+          Bigcommerce::Prometheus::Integrations::Railtie.config.before_initialize { base.reset }
+        else
+          base.reset
+        end
       end
 
       ##
@@ -83,6 +87,12 @@ module Bigcommerce
 
         self.puma_process_label = ENV.fetch('PROMETHEUS_PUMA_PROCESS_LABEL', 'web').to_s
         self.puma_collection_frequency = ENV.fetch('PROMETHEUS_PUMA_COLLECTION_FREQUENCY', 30).to_i
+      end
+
+      ##
+      # @return [String]
+      def process_name
+        @process_name ||= ENV.fetch('PROCESS', 'unknown')
       end
 
       private

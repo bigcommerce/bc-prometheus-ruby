@@ -27,6 +27,10 @@ module Bigcommerce
         def initialize(app:)
           @app = app
           @enabled = Bigcommerce::Prometheus.enabled
+          @process_name = Bigcommerce::Prometheus.process_name
+          @server_port = Bigcommerce::Prometheus.server_port
+          @server_timeout = Bigcommerce::Prometheus.server_timeout
+          @server_prefix = Bigcommerce::Prometheus.server_prefix
         end
 
         ##
@@ -34,14 +38,14 @@ module Bigcommerce
         #
         def start
           unless @enabled
-            logger.debug '[bigcommerce-prometheus] Prometheus disabled, skipping hutch start...'
+            logger.debug "[bigcommerce-prometheus][#{@process_name}] Prometheus disabled, skipping hutch start..."
             return
           end
 
-          start_server
+          server.start
           setup_middleware
         rescue StandardError => e
-          logger.error "[bigcommerce-prometheus] Failed to start hutch instrumentation - #{e.message} - #{e.backtrace[0..4].join("\n")}"
+          logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to start hutch instrumentation - #{e.message} - #{e.backtrace[0..4].join("\n")}"
         end
 
         private
@@ -54,14 +58,10 @@ module Bigcommerce
           )
         end
 
-        def start_server
-          logger.info "[bigcommerce-prometheus] Starting exporter on port #{@server_port} with timeout #{@server_timeout}"
-          server.start
-        end
-
         def setup_middleware
-          logger.info '[bigcommerce-prometheus] Setting up hutch prometheus middleware'
-          Hutch::Config.set(:tracer, PrometheusExporter::Instrumentation::Hutch)
+          logger.info "[bigcommerce-prometheus][#{@process_name}] Setting up hutch prometheus middleware"
+          require 'hutch'
+          ::Hutch::Config.set(:tracer, PrometheusExporter::Instrumentation::Hutch)
           @app.middleware.unshift(PrometheusExporter::Middleware, client: Bigcommerce::Prometheus.client)
         end
       end

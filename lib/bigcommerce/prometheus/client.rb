@@ -33,6 +33,7 @@ module Bigcommerce
           custom_labels: Bigcommerce::Prometheus.client_custom_labels
         )
         PrometheusExporter::Client.default = self
+        @process_name = ::Bigcommerce::Prometheus.process_name
       end
 
       ##
@@ -42,7 +43,7 @@ module Bigcommerce
         close_socket_if_old!
         process_queue
       rescue StandardError => e
-        logger.warn "Prometheus Exporter, failed to send message #{e} - #{e.backtrace[0..5].join("\n")}"
+        logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus client failed to send message #{e} - #{e.backtrace[0..5].join("\n")}"
       end
 
       ##

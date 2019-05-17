@@ -34,20 +34,76 @@ module Bigcommerce
         @timeout = (timeout || ::PrometheusExporter::DEFAULT_TIMEOUT).to_i
         @prefix = (prefix || ::PrometheusExporter::DEFAULT_PREFIX).to_s
         @verbose = verbose
+        @running = false
+        @process_name = ::Bigcommerce::Prometheus.process_name
       end
 
       ##
       # Start the server
       #
       def start
-        runner = ::PrometheusExporter::Server::Runner.new(
-          timeout: @timeout,
-          port: @port,
-          prefix: @prefix,
-          verbose: @verbose
-        )
-        logger.info "[bigcommerce-prometheus] Starting prometheus exporter on port #{@port}"
-        runner.start
+        setup_signal_handlers
+
+        logger.info "[bigcommerce-prometheus][#{@process_name}] Starting prometheus exporter on port #{@port}"
+        server.start
+        logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter started on port #{@port}"
+
+        @running = true
+        server
+      rescue StandardError => e
+        logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to start exporter: #{e.message}"
+        stop
+      end
+
+      ##
+      # Stop the server
+      #
+      def stop
+        logger.info "[bigcommerce-prometheus][#{@process_name}] Shutting down prometheus exporter"
+        server.stop
+        logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter cleanly shut down"
+      rescue StandardError => e
+        logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to stop exporter: #{e.message}"
+      end
+
+      ##
+      # Whether or not the server is running
+      #
+      # @return [Boolean]
+      #
+      def running?
+        @running
+      end
+
+      private
+
+      ##
+      # Register signal handlers
+      #
+      # :nocov:
+      def setup_signal_handlers
+        Signal.trap('INT', &method(:stop))
+        Signal.trap('TERM', &method(:stop))
+      end
+      # :nocov:
+
+      def server
+        @server ||= begin
+          runner = ::PrometheusExporter::Server::Runner.new(
+            timeout: @timeout,
+            port: @port,
+            prefix: @prefix,
+            verbose: @verbose
+          )
+          PrometheusExporter::Metric::Base.default_prefix = runner.prefix
+          runner.send(:register_type_collectors)
+          runner.server_class.new(
+            port: runner.port,
+            collector: runner.collector,
+            timeout: runner.timeout,
+            verbose: runner.verbose
+          )
+        end
       end
     end
   end

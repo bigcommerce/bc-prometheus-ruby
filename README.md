@@ -38,6 +38,7 @@ After requiring the main file, you can further configure with:
 | puma_collection_frequency | How often to poll puma collection metrics (seconds) | 30 |
 | server_host | The host to run the exporter on | 0.0.0.0 |
 | server_port | The port to run the exporter on | 9394 |
+| process_name | What the current process name is. Used in logging. | `ENV['PROCESS']` | 
 
 ## License
 
