@@ -2,6 +2,10 @@ Changelog for the bc-prometheus-ruby gem.
 
 h3. Pending Release
 
+h3. 0.0.3
+
+- Add hutch instrumentor for hutch / rmq support
+
 h3. 0.0.2
 
 - Better support for older Rails / Puma versions
