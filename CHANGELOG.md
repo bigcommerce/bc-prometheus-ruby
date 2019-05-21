@@ -2,6 +2,10 @@ Changelog for the bc-prometheus-ruby gem.
 
 h3. Pending Release
 
+h3. 0.0.5
+
+- Add resque instrumentation
+
 h3. 0.0.4
 
 - Properly handle SIGINT/SIGTERM to shutdown prometheus exporter
