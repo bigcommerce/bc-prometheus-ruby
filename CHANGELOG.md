@@ -2,6 +2,10 @@ Changelog for the bc-prometheus-ruby gem.
 
 h3. Pending Release
 
+h3. 0.0.6
+
+- Switch railtie to `after_initialize` from `initializer`. This allows initializer configuration of the client.
+
 h3. 0.0.5
 
 - Add resque instrumentation
