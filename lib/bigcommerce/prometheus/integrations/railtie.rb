@@ -22,8 +22,8 @@ module Bigcommerce
       # Railtie for automatic configuration of Rails environments
       #
       class Railtie < ::Rails::Railtie
-        config.after_initialize do
-          Bigcommerce::Prometheus::Instrumentors::Web.new(app: Rails.application).start
+        initializer 'zzz_bigcommerce.prometheus.configure_rails_initialization' do |app|
+          Bigcommerce::Prometheus::Instrumentors::Web.new(app: app).start
         end
       end
     end
