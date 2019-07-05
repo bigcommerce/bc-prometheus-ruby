@@ -42,7 +42,8 @@ module Bigcommerce
             return
           end
 
-          server.add_type_collector(Bigcommerce::Prometheus::TypeCollectors::Resque)
+          server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
+          server.add_type_collector(Bigcommerce::Prometheus::TypeCollectors::Resque.new)
           server.start
           setup_middleware
         rescue StandardError => e

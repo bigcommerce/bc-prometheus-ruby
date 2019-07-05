@@ -21,49 +21,65 @@ module Bigcommerce
     # Server implementation for Prometheus
     #
     class Server
-      include Loggable
-
       ##
+      # @param [String] host
       # @param [Integer] port
       # @param [Integer] timeout
       # @param [String] prefix
-      # @param [Boolean] verbose
       #
-      def initialize(port: nil, timeout: nil, prefix: nil, verbose: false)
-        @port = (port || ::PrometheusExporter::DEFAULT_PORT).to_i
-        @timeout = (timeout || ::PrometheusExporter::DEFAULT_TIMEOUT).to_i
+      def initialize(host: nil, port: nil, timeout: nil, prefix: nil, logger: nil)
+        @host = host || ::Bigcommerce::Prometheus.server_host
+        @port = (port || ::Bigcommerce::Prometheus.server_port).to_i
+        @timeout = (timeout || ::Bigcommerce::Prometheus.server_timeout).to_i
         @prefix = (prefix || ::PrometheusExporter::DEFAULT_PREFIX).to_s
-        @verbose = verbose
-        @running = false
         @process_name = ::Bigcommerce::Prometheus.process_name
+        @logger = logger || ::Bigcommerce::Prometheus.logger
+        @server = ::Bigcommerce::Prometheus::Servers::Thin::Server.new(port: @port, timeout: @timeout, logger: @logger)
+        @running = false
+        ::PrometheusExporter::Metric::Base.default_prefix = @prefix
+        setup_signal_handlers
       end
 
       ##
       # Start the server
       #
       def start
-        setup_signal_handlers
+        @logger.info "[bigcommerce-prometheus][#{@process_name}] Starting prometheus exporter on port #{@host}:#{@port}"
 
-        logger.info "[bigcommerce-prometheus][#{@process_name}] Starting prometheus exporter on port #{@port}"
-        server.start
-        logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter started on port #{@port}"
-
+        @run_thread = ::Thread.start do
+          @server.start
+        end
         @running = true
-        server
-      rescue StandardError => e
-        logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to start exporter: #{e.message}"
+
+        @logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter started on #{@host}:#{@port}"
+
+        @server
+      rescue ::StandardError => e
+        @logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to start exporter: #{e.message}"
         stop
+      end
+
+      ##
+      # Start the server and run it until stopped
+      #
+      def start_until_stopped
+        start
+        yield
+        @run_thread.join
+      rescue StandardError => e
+        @logger.error "[bigcommerce-prometheus] Server crashed: #{e.message}"
       end
 
       ##
       # Stop the server
       #
       def stop
-        logger.info "[bigcommerce-prometheus][#{@process_name}] Shutting down prometheus exporter"
-        server.stop
-        logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter cleanly shut down"
-      rescue StandardError => e
-        logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to stop exporter: #{e.message}"
+        @server.stop!
+        @run_thread.kill
+        @running = false
+        @logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter cleanly shut down"
+      rescue ::StandardError => e
+        @logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to stop exporter: #{e.message}"
       end
 
       ##
@@ -81,48 +97,21 @@ module Bigcommerce
       # @param [PrometheusExporter::Server::TypeCollector] collector
       #
       def add_type_collector(collector)
-        runner.type_collectors = runner.type_collectors.push(collector)
+        @logger.info "[bigcommerce-prometheus][#{@process_name}] Registering collector #{collector&.type}"
+        @server.add_type_collector(collector)
       end
 
       private
-
-      ##
-      # @return [::PrometheusExporter::Server::Runner]
-      #
-      def runner
-        unless @runner
-          @runner = ::PrometheusExporter::Server::Runner.new(
-            timeout: @timeout,
-            port: @port,
-            prefix: @prefix,
-            verbose: @verbose
-          )
-          PrometheusExporter::Metric::Base.default_prefix = @runner.prefix
-        end
-        @runner
-      end
 
       ##
       # Register signal handlers
       #
       # :nocov:
       def setup_signal_handlers
-        Signal.trap('INT', &method(:stop))
-        Signal.trap('TERM', &method(:stop))
+        ::Signal.trap('INT', &method(:stop))
+        ::Signal.trap('TERM', &method(:stop))
       end
       # :nocov:
-
-      def server
-        @server ||= begin
-          runner.send(:register_type_collectors)
-          runner.server_class.new(
-            port: runner.port,
-            collector: runner.collector,
-            timeout: runner.timeout,
-            verbose: runner.verbose
-          )
-        end
-      end
     end
   end
 end

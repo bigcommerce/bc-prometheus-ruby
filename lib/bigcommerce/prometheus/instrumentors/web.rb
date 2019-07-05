@@ -62,6 +62,8 @@ module Bigcommerce
         def setup_before_fork
           @app.config.before_fork_callbacks = [] unless @app.config.before_fork_callbacks
           @app.config.before_fork_callbacks << lambda do
+            server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
+            server.add_type_collector(PrometheusExporter::Server::WebCollector.new)
             server.start
           end
         end

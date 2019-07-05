@@ -2,6 +2,11 @@ Changelog for the bc-prometheus-ruby gem.
 
 h3. Pending Release
 
+h3. 0.1.0
+
+- Replace WEBrick server from PrometheusExporter with Thin server implementation to reduce memory leakage
+- Utilize NET::HTTP instead of direct sockets to prevent bad socket errors
+
 h3. 0.0.5
 
 - Add resque instrumentation

@@ -43,7 +43,7 @@ module Bigcommerce
         close_socket_if_old!
         process_queue
       rescue StandardError => e
-        logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus client failed to send message #{e} - #{e.backtrace[0..5].join("\n")}"
+        logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus client failed to send message to #{@host}:#{@port} #{e} - #{e.backtrace[0..5].join("\n")}"
       end
 
       ##
@@ -51,6 +51,29 @@ module Bigcommerce
       #
       def close_socket_if_old!
         close_socket! if @socket && ((@socket_started.to_i + MAX_SOCKET_AGE) < Time.now.to_f)
+      end
+
+      ##
+      # @param [String] path
+      # @return [URI]
+      #
+      def uri_path(path)
+        URI("http://#{@host}:#{@port}#{path}")
+      end
+
+      ##
+      # Process the current queue and flush to the collector
+      #
+      def process_queue
+        while @queue.length.to_i.positive?
+          begin
+            message = @queue.pop
+            Net::HTTP.post(uri_path('/send-metrics'), message)
+          rescue StandardError => e
+            logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter is dropping a message tp #{uri_path('/send-metrics')}: #{e}"
+            raise
+          end
+        end
       end
     end
   end
