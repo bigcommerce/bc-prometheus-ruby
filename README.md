@@ -5,7 +5,7 @@
 ## Installation
 
 ```ruby
-gem 'bc-prometheus-ruby', git: 'git@github.com:bigcommerce/bc-prometheus-ruby'
+gem 'bc-prometheus-ruby'
 ```
 
 Then in your `application.rb`, prior to extending `Rails::Application` or any initializers:
