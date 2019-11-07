@@ -1,6 +1,6 @@
 # bc-prometheus-ruby - Drop-in Prometheus metrics
 
-[![CircleCI](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby/tree/master.svg?style=svg)](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby/tree/master)
+[![CircleCI](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby.svg?style=svg&circle-token=fc3e2c4405a1f53a31e298f0ef981c2d0dfdee90)](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby)
 
 ## Installation
 
