@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright (c) 2019-present, BigCommerce Pty. Ltd. All rights reserved
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
@@ -13,21 +15,18 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-ENV['RACK_ENV'] = 'test'
-$LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
-require_relative 'simplecov_helper'
-require 'bigcommerce/prometheus'
-require 'pry'
-Dir["#{File.join(File.dirname(__FILE__), 'support')}/**/*.rb"].each {|f| require f }
+require 'null_logger'
+
+module LoggerHelper
+  def logger
+    Bigcommerce::Prometheus.logger
+  end
+end
 
 RSpec.configure do |config|
-  config.alias_example_to :fit, focus: true
-  config.filter_run focus: true
-  config.filter_run_excluding broken: true
-  config.run_all_when_everything_filtered = true
-  config.expose_current_running_example_as :example
-  config.mock_with :rspec do |mocks|
-    mocks.allow_message_expectations_on_nil = true
+  config.before do
+    Bigcommerce::Prometheus.logger = NullLogger.new unless ENV.fetch('DEBUG', 0).to_i.positive?
   end
-  config.color = true
+
+  include LoggerHelper
 end

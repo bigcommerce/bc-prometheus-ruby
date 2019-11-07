@@ -15,11 +15,13 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
+require 'net/http'
 require 'prometheus_exporter'
 require 'prometheus_exporter/server'
 require 'prometheus_exporter/client'
 require 'prometheus_exporter/middleware'
 require 'prometheus_exporter/instrumentation'
+require 'thin'
 
 require_relative 'prometheus/version'
 require_relative 'prometheus/loggable'
@@ -36,6 +38,15 @@ require_relative 'prometheus/instrumentors/resque'
 require_relative 'prometheus/integrations/railtie' if defined?(Rails)
 require_relative 'prometheus/integrations/puma'
 require_relative 'prometheus/integrations/resque'
+
+require_relative 'prometheus/servers/thin/server'
+require_relative 'prometheus/servers/thin/rack_app'
+require_relative 'prometheus/servers/thin/server_metrics'
+require_relative 'prometheus/servers/thin/controllers/base_controller'
+require_relative 'prometheus/servers/thin/controllers/error_controller'
+require_relative 'prometheus/servers/thin/controllers/metrics_controller'
+require_relative 'prometheus/servers/thin/controllers/not_found_controller'
+require_relative 'prometheus/servers/thin/controllers/send_metrics_controller'
 
 module Bigcommerce
   ##

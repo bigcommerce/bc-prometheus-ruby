@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright (c) 2019-present, BigCommerce Pty. Ltd. All rights reserved
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
@@ -13,21 +15,22 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-ENV['RACK_ENV'] = 'test'
-$LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
-require_relative 'simplecov_helper'
-require 'bigcommerce/prometheus'
-require 'pry'
-Dir["#{File.join(File.dirname(__FILE__), 'support')}/**/*.rb"].each {|f| require f }
-
-RSpec.configure do |config|
-  config.alias_example_to :fit, focus: true
-  config.filter_run focus: true
-  config.filter_run_excluding broken: true
-  config.run_all_when_everything_filtered = true
-  config.expose_current_running_example_as :example
-  config.mock_with :rspec do |mocks|
-    mocks.allow_message_expectations_on_nil = true
+module Bigcommerce
+  module Prometheus
+    module Servers
+      module Thin
+        module Controllers
+          ##
+          # Handle invalid requests to server
+          #
+          class NotFoundController < BaseController
+            def call
+              @response.status = 404
+              @response.body << 'Not Found! The Prometheus Ruby Exporter only listens on /metrics and /send-metrics'
+            end
+          end
+        end
+      end
+    end
   end
-  config.color = true
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright (c) 2019-present, BigCommerce Pty. Ltd. All rights reserved
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
@@ -13,21 +15,34 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-ENV['RACK_ENV'] = 'test'
-$LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
-require_relative 'simplecov_helper'
-require 'bigcommerce/prometheus'
-require 'pry'
-Dir["#{File.join(File.dirname(__FILE__), 'support')}/**/*.rb"].each {|f| require f }
+module Bigcommerce
+  module Prometheus
+    module Servers
+      module Thin
+        ##
+        # Thin adapter for server
+        #
+        class Server < ::Thin::Server
+          def initialize(port:, host: nil, timeout: nil, logger: nil)
+            @port = port || ::PrometheusExporter::DEFAULT_PORT
+            @host = host || '0.0.0.0'
+            @timeout = timeout || ::PrometheusExporter::DEFAULT_TIMEOUT
+            @logger = logger || ::Bigcommerce::Prometheus.logger
+            @rack_app = ::Bigcommerce::Prometheus::Servers::Thin::RackApp.new(timeout: timeout, logger: logger)
+            super(@host, @port, @rack_app)
+            ::Thin::Logging.logger = @logger
+          end
 
-RSpec.configure do |config|
-  config.alias_example_to :fit, focus: true
-  config.filter_run focus: true
-  config.filter_run_excluding broken: true
-  config.run_all_when_everything_filtered = true
-  config.expose_current_running_example_as :example
-  config.mock_with :rspec do |mocks|
-    mocks.allow_message_expectations_on_nil = true
+          ##
+          # Add a type collector to this server
+          #
+          # @param [PrometheusExporter::Server::TypeCollector] collector
+          #
+          def add_type_collector(collector)
+            @rack_app.add_type_collector(collector)
+          end
+        end
+      end
+    end
   end
-  config.color = true
 end
