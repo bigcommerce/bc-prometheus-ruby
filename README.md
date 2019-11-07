@@ -1,6 +1,6 @@
 # bc-prometheus-ruby - Drop-in Prometheus metrics
 
-[![CircleCI](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby.svg?style=svg&circle-token=fc3e2c4405a1f53a31e298f0ef981c2d0dfdee90)](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby)
+[![CircleCI](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby.svg?style=svg&circle-token=fc3e2c4405a1f53a31e298f0ef981c2d0dfdee90)](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby) [![Gem Version](https://badge.fury.io/rb/bc-prometheus-ruby)](https://badge.fury.io/rb/bc-prometheus-ruby) [![Documentation](https://inch-ci.org/github/bigcommerce/bc-prometheus-ruby.svg?branch=master)](https://inch-ci.org/github/bigcommerce/bc-prometheus-ruby?branch=master)[![Gem Version](https://badge.fury.io/rb/bc-prometheus-ruby.svg)](https://badge.fury.io/rb/bc-prometheus-ruby) [![Documentation](https://inch-ci.org/github/bigcommerce/bc-prometheus-ruby.svg?branch=master)](https://inch-ci.org/github/bigcommerce/bc-prometheus-ruby?branch=master)
 
 ## Installation
 
