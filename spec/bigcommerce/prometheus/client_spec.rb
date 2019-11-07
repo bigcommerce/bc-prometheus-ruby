@@ -15,8 +15,22 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-module Bigcommerce
-  module Prometheus
-    VERSION = '0.1.1'
+require 'spec_helper'
+
+describe Bigcommerce::Prometheus::Client do
+  let(:client) { described_class.instance }
+
+  describe '.initialize' do
+    subject { client }
+
+    it 'should initialize the client object from the singleton' do
+      expect(subject).to be_a(described_class)
+    end
+
+    it 'should behave like a singleton' do
+      ref1 = described_class.instance
+      ref2 = described_class.instance
+      expect(ref1).to eq ref2
+    end
   end
 end

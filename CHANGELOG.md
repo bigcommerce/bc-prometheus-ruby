@@ -2,6 +2,11 @@ Changelog for the bc-prometheus-ruby gem.
 
 h3. Pending Release
 
+h3. 0.1.1
+
+- Add multitrap to more cleanly handle trap signals
+- Use proc in signal handlers for consistent trap handling
+
 h3. 0.1.0
 
 - Replace WEBrick server from PrometheusExporter with Thin server implementation to reduce memory leakage

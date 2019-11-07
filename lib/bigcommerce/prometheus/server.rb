@@ -108,8 +108,8 @@ module Bigcommerce
       #
       # :nocov:
       def setup_signal_handlers
-        ::Signal.trap('INT', &method(:stop))
-        ::Signal.trap('TERM', &method(:stop))
+        ::Signal.trap('INT', proc { stop })
+        ::Signal.trap('TERM', proc { stop })
       end
       # :nocov:
     end
