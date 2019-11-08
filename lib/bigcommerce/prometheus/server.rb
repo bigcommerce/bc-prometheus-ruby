@@ -67,7 +67,8 @@ module Bigcommerce
         yield
         @run_thread.join
       rescue StandardError => e
-        @logger.error "[bigcommerce-prometheus] Server crashed: #{e.message}"
+        warn "[bigcommerce-prometheus] Server crashed: #{e.message}"
+        stop
       end
 
       ##
@@ -77,9 +78,9 @@ module Bigcommerce
         @server.stop!
         @run_thread.kill
         @running = false
-        @logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter cleanly shut down"
+        STDOUT.puts "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter cleanly shut down"
       rescue ::StandardError => e
-        @logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to stop exporter: #{e.message}"
+        warn "[bigcommerce-prometheus][#{@process_name}] Failed to stop exporter: #{e.message}"
       end
 
       ##

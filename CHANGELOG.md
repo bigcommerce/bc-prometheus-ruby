@@ -2,7 +2,7 @@ Changelog for the bc-prometheus-ruby gem.
 
 h3. Pending Release
 
-h3. 0.1.2
+h3. 0.1.3
 
 - Move to bigcommerce fork of multitrap to handle IGNORE clauses more cleanly
 
