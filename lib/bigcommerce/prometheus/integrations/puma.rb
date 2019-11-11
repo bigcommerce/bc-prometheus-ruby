@@ -25,21 +25,23 @@ module Bigcommerce
         ##
         # Start the puma collector
         #
-        def self.start
+        def self.start(client: nil, frequency: nil)
+          return unless puma_enabled?
+
           ::PrometheusExporter::Instrumentation::Puma.start(
-            client: ::Bigcommerce::Prometheus.client,
-            frequency: ::Bigcommerce::Prometheus.puma_collection_frequency
+            client: client || ::Bigcommerce::Prometheus.client,
+            frequency: frequency || ::Bigcommerce::Prometheus.puma_collection_frequency
           )
           if active_record_enabled?
             ::PrometheusExporter::Instrumentation::ActiveRecord.start(
-              client: ::Bigcommerce::Prometheus.client,
-              frequency: ::Bigcommerce::Prometheus.puma_collection_frequency
+              client: client || ::Bigcommerce::Prometheus.client,
+              frequency: frequency || ::Bigcommerce::Prometheus.puma_collection_frequency
             )
           end
           ::PrometheusExporter::Instrumentation::Process.start(
-            client: ::Bigcommerce::Prometheus.client,
+            client: client || ::Bigcommerce::Prometheus.client,
             type: ::Bigcommerce::Prometheus.puma_process_label,
-            frequency: ::Bigcommerce::Prometheus.puma_collection_frequency
+            frequency: frequency || ::Bigcommerce::Prometheus.puma_collection_frequency
           )
         end
 
@@ -48,6 +50,13 @@ module Bigcommerce
         #
         def self.active_record_enabled?
           defined?(ActiveRecord) && ::ActiveRecord::Base.connection_pool.respond_to?(:stat)
+        end
+
+        ##
+        # @return [Boolean]
+        #
+        def self.puma_enabled?
+          defined?(Puma) && Puma.respond_to?(:stats)
         end
       end
     end
