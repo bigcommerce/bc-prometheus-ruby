@@ -56,7 +56,7 @@ module Bigcommerce
         # @return [Boolean]
         #
         def self.puma_enabled?
-          defined?(Puma) && Puma.respond_to?(:stats)
+          defined?(::Puma) && ::Puma.respond_to?(:stats)
         end
       end
     end

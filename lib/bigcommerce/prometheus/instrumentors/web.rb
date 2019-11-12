@@ -64,6 +64,7 @@ module Bigcommerce
           @app.config.before_fork_callbacks << lambda do
             server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
             server.add_type_collector(PrometheusExporter::Server::WebCollector.new)
+            server.add_type_collector(PrometheusExporter::Server::PumaCollector.new)
             server.start
           end
         end

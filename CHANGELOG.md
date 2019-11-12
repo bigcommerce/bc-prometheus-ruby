@@ -2,6 +2,10 @@ Changelog for the bc-prometheus-ruby gem.
 
 h3. Pending Release
 
+h3. 0.1.5
+
+- Fix issue where puma collector was not being registered on the server
+
 h3. 0.1.4
 
 - Handle circumstances when before_fork_callbacks is called outside of the web process
