@@ -21,59 +21,33 @@ module Bigcommerce
       ##
       # Collect resque data from collectors and parse them into metrics
       #
-      class Resque < PrometheusExporter::Server::TypeCollector
+      class Resque < Bigcommerce::Prometheus::TypeCollectors::Base
         ##
         # Initialize the collector
         #
-        def initialize
-          @workers_total = PrometheusExporter::Metric::Gauge.new('resque_workers_total', 'Number of active workers')
-          @jobs_failed_total = PrometheusExporter::Metric::Gauge.new('jobs_failed_total', 'Number of failed jobs')
-          @jobs_pending_total = PrometheusExporter::Metric::Gauge.new('jobs_pending_total', 'Number of pending jobs')
-          @jobs_processed_total = PrometheusExporter::Metric::Gauge.new('jobs_processed_total', 'Number of processed jobs')
-          @queues_total = PrometheusExporter::Metric::Gauge.new('queues_total', 'Number of total queues')
-          @queue_sizes = PrometheusExporter::Metric::Gauge.new('queue_sizes', 'Size of each queue')
-        end
-
-        ##
-        # @return [String]
-        #
-        def type
-          'resque'
-        end
-
-        ##
-        # @return [Array]
-        #
-        def metrics
-          return [] unless @workers_total
-
-          [
-            @workers_total,
-            @jobs_failed_total,
-            @jobs_pending_total,
-            @jobs_processed_total,
-            @queues_total,
-            @queue_sizes
-          ]
+        def build_metrics
+          {
+            workers_total: PrometheusExporter::Metric::Gauge.new('resque_workers_total', 'Number of active workers'),
+            jobs_failed_total: PrometheusExporter::Metric::Gauge.new('jobs_failed_total', 'Number of failed jobs'),
+            jobs_pending_total: PrometheusExporter::Metric::Gauge.new('jobs_pending_total', 'Number of pending jobs'),
+            jobs_processed_total: PrometheusExporter::Metric::Gauge.new('jobs_processed_total', 'Number of processed jobs'),
+            queues_total: PrometheusExporter::Metric::Gauge.new('queues_total', 'Number of total queues'),
+            queue_sizes: PrometheusExporter::Metric::Gauge.new('queue_sizes', 'Size of each queue')
+          }
         end
 
         ##
         # Collect resque metrics from input data
         #
-        def collect(obj)
-          default_labels = { environment: obj['environment'] }
+        def collect_metrics(data:, labels: {})
+          metric(:workers_total).observe(obj['workers_total'], labels)
+          metric(:jobs_failed_total).observe(obj['jobs_failed_total'], labels)
+          metric(:jobs_pending_total).observe(obj['jobs_pending_total'], labels)
+          metric(:jobs_processed_total).observe(obj['jobs_processed_total'], labels)
+          metric(:queues_total).observe(obj['queues_total'], labels)
 
-          custom_labels = obj['custom_labels']
-          labels = custom_labels.nil? ? default_labels : default_labels.merge(custom_labels)
-
-          @workers_total.observe(obj['workers_total'], labels)
-          @jobs_failed_total.observe(obj['jobs_failed_total'], labels)
-          @jobs_pending_total.observe(obj['jobs_pending_total'], labels)
-          @jobs_processed_total.observe(obj['jobs_processed_total'], labels)
-          @queues_total.observe(obj['queues_total'], labels)
-
-          obj['queues'].each do |name, size|
-            @queue_sizes.observe(size, labels.merge(queue: name))
+          data['queues'].each do |name, size|
+            metric(:queue_sizes).observe(size, labels.merge(queue: name))
           end
         end
       end

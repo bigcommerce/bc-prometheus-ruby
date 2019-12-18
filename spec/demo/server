@@ -16,36 +16,33 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
+ENV['PROCESS'] = 'demo'
 $LOAD_PATH.unshift File.expand_path('../../../lib', __FILE__)
 require 'bigcommerce/prometheus'
 require 'logger'
-ENV['PROCESS'] = 'demo'
+require_relative 'support'
 
 logger = ::Logger.new(STDOUT)
 logger.level = ::Logger::Severity::INFO
-
-# Puma mock
-class Puma
-  def self.stats
-    {
-      'phase' => 0,
-      'workers' => rand(8..12),
-      'booted_workers' => 10,
-      'old_workers' => 0,
-      'worker_status' => []
-    }.to_json
-  end
-end
 
 ::Bigcommerce::Prometheus.configure do |c|
   c.server_port = 8_622
   c.server_host = '0.0.0.0'
   c.logger = logger
   c.puma_collection_frequency = 5
+  c.web_collectors = [Demo::GeeseCollector]
+  c.web_type_collectors = [Demo::GeeseTypeCollector.new]
 end
 
 server = ::Bigcommerce::Prometheus::Server.new
+Bigcommerce::Prometheus.web_type_collectors.each do |tc|
+  server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
+  server.add_type_collector(PrometheusExporter::Server::WebCollector.new)
+  server.add_type_collector(PrometheusExporter::Server::PumaCollector.new)
+  server.add_type_collector(tc)
+end
 server.start_until_stopped do
   sleep 2
   ::Bigcommerce::Prometheus::Integrations::Puma.start
+  Demo::GeeseCollector.start
 end

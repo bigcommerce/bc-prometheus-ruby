@@ -2,6 +2,10 @@ Changelog for the bc-prometheus-ruby gem.
 
 h3. Pending Release
 
+- Add the ability to pass custom collectors and type collectors to the web instrumenter
+- Add base collector and type collector classes for ease of development of custom integrations
+- Change railtie to after initialization to allow for customization
+
 h3. 0.1.5
 
 - Fix issue where puma collector was not being registered on the server

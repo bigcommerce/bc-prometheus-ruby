@@ -22,54 +22,21 @@ module Bigcommerce
       # Collect metrics to push to the server type collector
       #
       class Resque
-        include Bigcommerce::Prometheus::Loggable
-
         ##
-        # @param [Bigcommerce::Prometheus::Client] client
-        # @param [Integer] frequency
+        # @param [Hash] metrics
+        # @return [Hash]
         #
-        def initialize(client:, frequency: nil)
-          @client = client || Bigcommerce::Prometheus.client
-          @frequency = frequency || 15
-        end
-
-        ##
-        # Start the collector
-        #
-        def self.start(client: nil, frequency: nil)
-          collector = new(client: client, frequency: frequency)
-          Thread.new do
-            loop do
-              collector.run
-            end
-          end
-        end
-
-        def run
-          metric = collect
-          logger.debug "[bigcommerce-prometheus] Pushing resque metrics to type collector: #{metric.inspect}"
-          @client.send_json metric
-        rescue StandardError => e
-          logger.error "[bigcommerce-prometheus] Failed to collect resque prometheus stats: #{e.message}"
-        ensure
-          sleep @frequency
-        end
-
-        private
-
-        def collect
+        def collect(metrics = {})
           info = ::Resque.info
 
-          metric = {}
-          metric[:type] = 'resque'
-          metric[:environment] = info[:environment].to_s
-          metric[:workers_total] = info[:workers].to_i
-          metric[:jobs_failed_total] = info[:failed].to_i
-          metric[:jobs_pending_total] = info[:pending].to_i
-          metric[:jobs_processed_total] = info[:processed].to_i
-          metric[:queues_total] = info[:queues].to_i
-          metric[:queues] = queue_sizes
-          metric
+          metrics[:environment] = info[:environment].to_s
+          metrics[:workers_total] = info[:workers].to_i
+          metrics[:jobs_failed_total] = info[:failed].to_i
+          metrics[:jobs_pending_total] = info[:pending].to_i
+          metrics[:jobs_processed_total] = info[:processed].to_i
+          metrics[:queues_total] = info[:queues].to_i
+          metrics[:queues] = queue_sizes
+          metrics
         end
 
         def queue_sizes

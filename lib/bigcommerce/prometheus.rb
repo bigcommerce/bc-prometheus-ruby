@@ -30,7 +30,9 @@ require_relative 'prometheus/configuration'
 require_relative 'prometheus/server'
 require_relative 'prometheus/client'
 
+require_relative 'prometheus/collectors/base'
 require_relative 'prometheus/collectors/resque'
+require_relative 'prometheus/type_collectors/base'
 require_relative 'prometheus/type_collectors/resque'
 
 require_relative 'prometheus/instrumentors/web'

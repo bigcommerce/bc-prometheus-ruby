@@ -34,7 +34,9 @@ module Bigcommerce
         server_host: '0.0.0.0',
         server_port: PrometheusExporter::DEFAULT_PORT,
         server_timeout: PrometheusExporter::DEFAULT_TIMEOUT,
-        server_prefix: PrometheusExporter::DEFAULT_PREFIX
+        server_prefix: PrometheusExporter::DEFAULT_PREFIX,
+        web_collectors: [],
+        web_type_collectors: []
       }.freeze
 
       attr_accessor *VALID_CONFIG_KEYS.keys
@@ -89,6 +91,7 @@ module Bigcommerce
 
         self.puma_process_label = ENV.fetch('PROMETHEUS_PUMA_PROCESS_LABEL', 'web').to_s
         self.puma_collection_frequency = ENV.fetch('PROMETHEUS_PUMA_COLLECTION_FREQUENCY', 30).to_i
+        self.web_type_collectors = []
       end
 
       ##

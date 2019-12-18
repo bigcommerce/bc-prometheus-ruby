@@ -15,8 +15,39 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-module Bigcommerce
-  module Prometheus
-    VERSION = '0.2.0.pre'
+
+# Puma mock
+class Puma
+  def self.stats
+    {
+      'phase' => 0,
+      'workers' => rand(8..12),
+      'booted_workers' => 10,
+      'old_workers' => 0,
+      'worker_status' => []
+    }.to_json
+  end
+end
+
+# Custom type collector
+module Demo
+  class GeeseTypeCollector < Bigcommerce::Prometheus::TypeCollectors::Base
+    def build_metrics
+      {
+        geese_total: PrometheusExporter::Metric::Gauge.new('geese_total', 'Number of geese')
+      }
+    end
+
+    def collect_metrics(data:, labels: {})
+      metric(:geese_total)&.observe(data['geese_total'], labels)
+    end
+  end
+
+  # Custom collector
+  class GeeseCollector < Bigcommerce::Prometheus::Collectors::Base
+    def collect(metrics)
+      metrics[:geese_total] = rand(100)
+      metrics
+    end
   end
 end

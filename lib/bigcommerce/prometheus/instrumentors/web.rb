@@ -31,6 +31,8 @@ module Bigcommerce
           @server_timeout = Bigcommerce::Prometheus.server_timeout
           @server_prefix = Bigcommerce::Prometheus.server_prefix
           @process_name = Bigcommerce::Prometheus.process_name
+          @collectors = Bigcommerce::Prometheus.web_collectors || []
+          @type_collectors = Bigcommerce::Prometheus.web_type_collectors || []
         end
 
         ##
@@ -65,6 +67,9 @@ module Bigcommerce
             server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
             server.add_type_collector(PrometheusExporter::Server::WebCollector.new)
             server.add_type_collector(PrometheusExporter::Server::PumaCollector.new)
+            @type_collectors.each do |tc|
+              server.add_type_collector(tc)
+            end
             server.start
           end
         end
@@ -73,6 +78,7 @@ module Bigcommerce
           @app.config.after_fork_callbacks = [] unless @app.config.after_fork_callbacks
           @app.config.after_fork_callbacks << lambda do
             ::Bigcommerce::Prometheus::Integrations::Puma.start
+            @collectors.each(&:start)
           end
         end
 
