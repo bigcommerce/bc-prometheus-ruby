@@ -28,10 +28,12 @@ module Bigcommerce
         def self.start(client: nil, frequency: nil)
           return unless puma_enabled?
 
-          ::PrometheusExporter::Instrumentation::Puma.start(
-            client: client || ::Bigcommerce::Prometheus.client,
-            frequency: frequency || ::Bigcommerce::Prometheus.puma_collection_frequency
-          )
+          if puma_enabled?
+            ::PrometheusExporter::Instrumentation::Puma.start(
+              client: client || ::Bigcommerce::Prometheus.client,
+              frequency: frequency || ::Bigcommerce::Prometheus.puma_collection_frequency
+            )
+          end
           if active_record_enabled?
             ::PrometheusExporter::Instrumentation::ActiveRecord.start(
               client: client || ::Bigcommerce::Prometheus.client,

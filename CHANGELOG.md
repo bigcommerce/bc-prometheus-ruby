@@ -2,6 +2,8 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+- Prevent starting of Puma integration if Puma is not loaded
+
 ### 0.2.0
 
 - Add the ability to pass custom collectors and type collectors to the web instrumenter
