@@ -21,7 +21,7 @@ module Bigcommerce
       ##
       # Collect metrics to push to the server type collector
       #
-      class Resque
+      class Resque < Base
         ##
         # @param [Hash] metrics
         # @return [Hash]

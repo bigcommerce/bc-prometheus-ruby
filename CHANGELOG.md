@@ -2,6 +2,8 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+- Fix missing inheritance for resque collector
+ 
 ### 0.2.1
 
 - Prevent starting of Puma integration if Puma is not loaded
