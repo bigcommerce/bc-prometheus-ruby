@@ -2,6 +2,8 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+### 0.2.2
+
 - Fix missing inheritance for resque collector
  
 ### 0.2.1
