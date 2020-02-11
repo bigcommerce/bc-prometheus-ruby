@@ -2,6 +2,9 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+- Set default STDOUT logger to INFO level
+- Fix bug with resque type collector
+
 ### 0.2.2
 
 - Fix missing inheritance for resque collector

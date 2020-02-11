@@ -110,6 +110,7 @@ module Bigcommerce
         else
           require 'logger'
           self.logger = ::Logger.new(STDOUT)
+          self.logger.level = ::Logger::Severity::INFO
         end
       end
 
