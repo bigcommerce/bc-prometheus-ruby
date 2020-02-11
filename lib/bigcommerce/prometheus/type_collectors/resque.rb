@@ -40,11 +40,11 @@ module Bigcommerce
         # Collect resque metrics from input data
         #
         def collect_metrics(data:, labels: {})
-          metric(:workers_total).observe(obj['workers_total'], labels)
-          metric(:jobs_failed_total).observe(obj['jobs_failed_total'], labels)
-          metric(:jobs_pending_total).observe(obj['jobs_pending_total'], labels)
-          metric(:jobs_processed_total).observe(obj['jobs_processed_total'], labels)
-          metric(:queues_total).observe(obj['queues_total'], labels)
+          metric(:workers_total).observe(data['workers_total'], labels)
+          metric(:jobs_failed_total).observe(data['jobs_failed_total'], labels)
+          metric(:jobs_pending_total).observe(data['jobs_pending_total'], labels)
+          metric(:jobs_processed_total).observe(data['jobs_processed_total'], labels)
+          metric(:queues_total).observe(data['queues_total'], labels)
 
           data['queues'].each do |name, size|
             metric(:queue_sizes).observe(size, labels.merge(queue: name))
