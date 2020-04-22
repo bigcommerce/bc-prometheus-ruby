@@ -84,6 +84,8 @@ module Bigcommerce
 
         def setup_middleware
           @app.middleware.unshift(PrometheusExporter::Middleware, client: Bigcommerce::Prometheus.client)
+        rescue StandardError => e
+          logger.warn "[bc-prometheus-ruby] Failed to attach app middleware in web instrumentor: #{e.message}"
         end
       end
     end
