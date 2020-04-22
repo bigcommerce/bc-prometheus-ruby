@@ -2,6 +2,11 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+### 0.2.4
+
+- Fix cant modify frozen array error when using bc-prometheus-ruby outside a web process 
+  but within rails
+  
 ### 0.2.3
 
 - Set default STDOUT logger to INFO level
