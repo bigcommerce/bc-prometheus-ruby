@@ -23,18 +23,32 @@ module Bigcommerce
     module Configuration
       VALID_CONFIG_KEYS = {
         logger: nil,
+        enabled: ENV.fetch('PROMETHEUS_ENABLED', 1).to_i.positive?,
+
+        # Client configuration
         client_custom_labels: nil,
-        client_max_queue_size: 10_000,
-        client_thread_sleep: 0.5,
-        enabled: true,
-        puma_collection_frequency: 30,
-        puma_process_label: 'web',
-        resque_collection_frequency: 30,
-        resque_process_label: 'resque',
-        server_host: '0.0.0.0',
-        server_port: PrometheusExporter::DEFAULT_PORT,
-        server_timeout: PrometheusExporter::DEFAULT_TIMEOUT,
-        server_prefix: PrometheusExporter::DEFAULT_PREFIX,
+        client_max_queue_size: ENV.fetch('PROMETHEUS_CLIENT_MAX_QUEUE_SIZE', 10_000).to_i,
+        client_thread_sleep: ENV.fetch('PROMETHEUS_CLIENT_THREAD_SLEEP', 0.5).to_f,
+
+        # Integration configuration
+        puma_collection_frequency: ENV.fetch('PROMETHEUS_PUMA_COLLECTION_FREQUENCY', 30).to_i,
+        puma_process_label: ENV.fetch('PROMETHEUS_PUMA_PROCESS_LABEL', 'web').to_s,
+        resque_collection_frequency: ENV.fetch('PROMETHEUS_RESQUE_COLLECTION_FREQUENCY', 30).to_i,
+        resque_process_label: ENV.fetch('PROMETHEUS_REQUEST_PROCESS_LABEL', 'resque').to_s,
+
+        # Server configuration
+        not_found_body: ENV.fetch('PROMETHEUS_SERVER_NOT_FOUND_BODY', 'Not Found! The Prometheus Ruby Exporter only listens on /metrics and /send-metrics').to_s,
+        server_host: ENV.fetch('PROMETHEUS_SERVER_HOST', '0.0.0.0').to_s,
+        server_port: ENV.fetch('PROMETHEUS_SERVER_PORT', PrometheusExporter::DEFAULT_PORT).to_i,
+        server_timeout: ENV.fetch('PROMETHEUS_DEFAULT_TIMEOUT', PrometheusExporter::DEFAULT_TIMEOUT).to_i,
+        server_prefix: ENV.fetch('PROMETHEUS_DEFAULT_PREFIX', PrometheusExporter::DEFAULT_PREFIX).to_s,
+
+        # Custom collector configuration
+        collector_collection_frequency: ENV.fetch('PROMETHEUS_DEFAULT_COLLECTOR_COLLECTION_FREQUENCY_SEC', 15).to_i,
+        hutch_collectors: [],
+        hutch_type_collectors: [],
+        resque_collectors: [],
+        resque_type_collectors: [],
         web_collectors: [],
         web_type_collectors: []
       }.freeze
@@ -85,12 +99,7 @@ module Bigcommerce
           send("#{k}=".to_sym, v)
         end
         determine_logger
-        self.enabled = ENV.fetch('PROMETHEUS_ENABLED', 1).to_i.positive?
-        self.server_host = ENV.fetch('PROMETHEUS_SERVER_HOST', '0.0.0.0').to_s
-        self.server_port = ENV.fetch('PROMETHEUS_SERVER_PORT', PrometheusExporter::DEFAULT_PORT).to_i
 
-        self.puma_process_label = ENV.fetch('PROMETHEUS_PUMA_PROCESS_LABEL', 'web').to_s
-        self.puma_collection_frequency = ENV.fetch('PROMETHEUS_PUMA_COLLECTION_FREQUENCY', 30).to_i
         self.web_type_collectors = []
       end
 

@@ -77,7 +77,7 @@ module Bigcommerce
         def setup_after_fork
           @app.config.after_fork_callbacks = [] unless @app.config.after_fork_callbacks
           @app.config.after_fork_callbacks << lambda do
-            ::Bigcommerce::Prometheus::Integrations::Puma.start
+            ::Bigcommerce::Prometheus::Integrations::Puma.start(client: Bigcommerce::Prometheus.client)
             @collectors.each(&:start)
           end
         end

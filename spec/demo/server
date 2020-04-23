@@ -45,4 +45,11 @@ server.start_until_stopped do
   sleep 2
   ::Bigcommerce::Prometheus::Integrations::Puma.start
   Demo::GeeseCollector.start
+
+  collector = Demo::GeeseCollector.new
+  loop do
+    collector.honk # ad hoc metric
+    logger.info 'HONK!'
+    sleep 3
+  end
 end

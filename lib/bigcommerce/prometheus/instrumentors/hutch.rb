@@ -31,6 +31,8 @@ module Bigcommerce
           @server_port = Bigcommerce::Prometheus.server_port
           @server_timeout = Bigcommerce::Prometheus.server_timeout
           @server_prefix = Bigcommerce::Prometheus.server_prefix
+          @collectors = Bigcommerce::Prometheus.hutch_collectors || []
+          @type_collectors = Bigcommerce::Prometheus.hutch_type_collectors || []
         end
 
         ##
@@ -44,6 +46,9 @@ module Bigcommerce
 
           server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
           server.add_type_collector(PrometheusExporter::Server::HutchCollector.new)
+          @type_collectors.each do |tc|
+            server.add_type_collector(tc)
+          end
           server.start
           setup_middleware
         rescue StandardError => e
@@ -65,6 +70,9 @@ module Bigcommerce
           require 'hutch'
           ::Hutch::Config.set(:tracer, PrometheusExporter::Instrumentation::Hutch)
           @app.middleware.unshift(PrometheusExporter::Middleware, client: Bigcommerce::Prometheus.client)
+          @collectors.each(&:start)
+        rescue StandardError => e
+          logger.warn "[bigcommerce-prometheus][#{@process_name}] Failed to setup hutch prometheus middleware: #{e.message}"
         end
       end
     end

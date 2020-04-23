@@ -49,15 +49,15 @@ module Bigcommerce
         end
 
         ##
-        # @param [PrometheusExporter::Client] client
+        # @param [Bigcommerce::Prometheus::Client] client
         # @param [String] type
         # @param [Integer] frequency
         # @param [Hash] options
         #
         def initialize(client: nil, type: nil, frequency: nil, options: nil)
-          @client = client || PrometheusExporter::Client.default
+          @client = client || Bigcommerce::Prometheus.client
           @type = type || self.class.to_s.downcase.gsub('::', '_').gsub('collector', '')
-          @frequency = frequency || 15
+          @frequency = frequency || Bigcommerce::Prometheus.collector_collection_frequency
           @options = options || {}
           @logger = Bigcommerce::Prometheus.logger
         end
@@ -66,12 +66,9 @@ module Bigcommerce
         # Run the collector and send stats
         #
         def run
-          metrics = { type: @type }
+          metrics = {}
           metrics = collect(metrics)
-          @logger.debug "[bigcommerce-prometheus] Pushing #{@type} metrics to type collector: #{metrics.inspect}"
-          @client.send_json(metrics)
-        rescue StandardError => e
-          @logger.error("Prometheus Exporter Failed To Collect #{@type} Stats #{e}")
+          push(metrics)
         ensure
           sleep @frequency
         end
@@ -84,6 +81,19 @@ module Bigcommerce
         #
         def collect(metrics = {})
           metrics
+        end
+
+        private
+
+        ##
+        # @param [Hash] metric
+        #
+        def push(metric)
+          metric[:type] = @type unless metric.key?(:type)
+          @logger.debug("[bigcommerce-prometheus] Pushing #{metric[:type]} metrics to type collector: #{metric.inspect}")
+          @client.send_json(metric)
+        rescue StandardError => e
+          @logger.error("[bigcommerce-prometheus] Prometheus Exporter failed to send #{metric[:type]} stats to type collector #{e}")
         end
       end
     end

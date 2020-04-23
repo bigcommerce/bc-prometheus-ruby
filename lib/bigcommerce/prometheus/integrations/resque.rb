@@ -25,13 +25,13 @@ module Bigcommerce
         ##
         # Start the resque integration
         #
-        def self.start
+        def self.start(client: nil)
           ::PrometheusExporter::Instrumentation::Process.start(
-            client: ::Bigcommerce::Prometheus.client,
+            client: client || ::Bigcommerce::Prometheus.client,
             type: ::Bigcommerce::Prometheus.resque_process_label
           )
           ::Bigcommerce::Prometheus::Collectors::Resque.start(
-            client: ::Bigcommerce::Prometheus.client,
+            client: client || ::Bigcommerce::Prometheus.client,
             frequency: ::Bigcommerce::Prometheus.resque_collection_frequency
           )
         end

@@ -24,9 +24,9 @@ module Bigcommerce
         #
         class Server < ::Thin::Server
           def initialize(port:, host: nil, timeout: nil, logger: nil)
-            @port = port || ::PrometheusExporter::DEFAULT_PORT
-            @host = host || '0.0.0.0'
-            @timeout = timeout || ::PrometheusExporter::DEFAULT_TIMEOUT
+            @port = port || ::Bigcommerce::Prometheus.server_port
+            @host = host || ::Bigcommerce::Prometheus.server_host
+            @timeout = timeout || ::Bigcommerce::Prometheus.server_timeout
             @logger = logger || ::Bigcommerce::Prometheus.logger
             @rack_app = ::Bigcommerce::Prometheus::Servers::Thin::RackApp.new(timeout: timeout, logger: logger)
             super(@host, @port, @rack_app)

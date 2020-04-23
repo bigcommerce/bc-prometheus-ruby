@@ -2,6 +2,11 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+- Add ability to pass custom resque and hutch Collectors/TypeCollectors
+- Add ENV support for all configuration elements
+- Fix issue where base collector did not use Bigcommerce::Prometheus.client
+- Expose new `push` method for Collectors::Base to ease use of custom ad hoc metrics 
+
 ### 0.2.4
 
 - Fix cant modify frozen array error when using bc-prometheus-ruby outside a web process 
