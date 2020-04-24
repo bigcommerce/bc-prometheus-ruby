@@ -17,34 +17,32 @@
 #
 # frozen_string_literal: true
 
-module Test
-  class DynamicCollector < ::Bigcommerce::Prometheus::Collectors::Base
-    def add_widget
-      push(
-        widgets: 1,
-        custom_labels: {
-          shape: 'round'
-        }
-      )
-    end
-
-    def collect(metrics)
-      metrics[:bonks] = 42
-      metrics
-    end
+class AppCollector < ::Bigcommerce::Prometheus::Collectors::Base
+  def honk!
+    push(
+      honks: 1,
+      custom_labels: {
+        volume: 'loud'
+      }
+    )
   end
 
-  class DynamicTypeCollector < ::Bigcommerce::Prometheus::TypeCollectors::Base
-    def build_metrics
-      {
-        bonks: PrometheusExporter::Metric::Counter.new('bonks', 'Running counter of bonks'),
-        widgets: PrometheusExporter::Metric::Gauge.new('widgets', 'Current amount of widgets')
-      }
-    end
+  def collect(metrics)
+    metrics[:points] = 42
+    metrics
+  end
+end
 
-    def collect_metrics(data:, labels: {})
-      metric(:widgets).observe(data.fetch('widgets', 0), labels)
-      metric(:bonks).observe(1, labels) if data.fetch('bonks', 0).to_i.positive?
-    end
+class AppTypeCollector < ::Bigcommerce::Prometheus::TypeCollectors::Base
+  def build_metrics
+    {
+      honks: PrometheusExporter::Metric::Counter.new('honks', 'Running counter of honks'),
+      points: PrometheusExporter::Metric::Gauge.new('points', 'Current amount of points')
+    }
+  end
+
+  def collect_metrics(data:, labels: {})
+    metric(:honks).observe(1, labels) if data.fetch('honks', 0).to_i.positive?
+    metric(:points).observe(data.fetch('points', 0), labels)
   end
 end

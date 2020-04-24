@@ -2,6 +2,8 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+- Support for only Ruby 2.6+ going forward
+- Updated README around custom metrics and collectors
 - Add ability to pass custom resque and hutch Collectors/TypeCollectors
 - Add ENV support for all configuration elements
 - Fix issue where base collector did not use Bigcommerce::Prometheus.client

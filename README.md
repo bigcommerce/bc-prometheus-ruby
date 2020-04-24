@@ -49,6 +49,127 @@ After requiring the main file, you can further configure with:
 | server_port | The port to run the exporter on | 9394 |
 | process_name | What the current process name is. Used in logging. | `ENV['PROCESS']` | 
 
+## Custom Collectors
+
+To create custom metrics and collectors, simply create two files: a collector (the class that runs and collects metrics),
+and the type collector, which runs on the threaded prometheus server and 
+
+### Type Collector
+
+First, create a type collector. Note that the "type" of this will be the full name of the class, with `TypeCollector`
+stripped. This is important later. Our example here will have a "type" of "app".
+
+```ruby
+class AppTypeCollector < ::Bigcommerce::Prometheus::TypeCollectors::Base
+  def build_metrics
+    {
+      honks: PrometheusExporter::Metric::Counter.new('honks', 'Running counter of honks'),
+      points: PrometheusExporter::Metric::Gauge.new('points', 'Current amount of points')
+    }
+  end
+
+  def collect_metrics(data:, labels: {})
+    metric(:points).observe(data.fetch('points', 0))
+    metric(:honks).observe(1, labels) if data.fetch('honks', 0).to_i.positive?
+  end
+end
+```
+
+There are two important methods here: `build_metrics`, which registers the different metrics you want to measure, and
+`collect_metrics`, which actually takes in the metrics and prepares them to be rendered so that Prometheus can scrape
+them.
+
+Note also in the example the different ways of observing Gauges vs Counters. 
+
+### Collector
+
+Next, create a collector. Your "type" of the Collector must match the type collector above, so that bc-prometheus-ruby
+knows how to map the metrics to the right TypeCollector. This is inferred from the class name. Here, it is "app":
+
+```ruby
+class AppCollector < ::Bigcommerce::Prometheus::Collectors::Base
+  def honk!
+    push(
+      honks: 1,
+      custom_labels: {
+        volume: 'loud'
+      }
+    )
+  end
+
+  def collect(metrics)
+    metrics[:points] = rand(1..100)
+    metrics
+  end
+end
+```
+
+There are two types of metrics here: on-demand, and polled. Let's look at the first:
+
+#### On-Demand Metrics
+
+To issue an on-demand metric (usually a counter) that then automatically updates, in your application code, you would
+then run:
+
+```ruby
+app_collector = AppCollector.new
+app_collector.honk!
+```
+
+This will "push" the metrics to our `AppTypeCollector` instance, which will render them as:
+
+```
+# HELP ruby_honks Running counter of honks
+# TYPE ruby_honks counter
+ruby_honks{volume="loud"} 2
+```
+
+As you can see this will respect any custom labels we push in as well.
+
+### Polling Metrics
+
+Using our same AppCollector, if you note the `collect` method: this method will run on a 15 second polled basis
+(the frequency of which is configurable in the initializer of the AppCollector). Here we're just spitting out random
+points, so it'll look something like this:
+
+```
+# HELP ruby_points Current amount of points
+# TYPE ruby_points gauge
+ruby_points 42
+```
+
+### Registering Our Collectors
+
+Each different type of integration will need to have the collectors passed into them, where appropriate. For example,
+if we want these collectors to run on our web, resque, and hutch processes, we'll need to:
+
+```ruby
+::Bigcommerce::Prometheus.configure do |c|
+  c.web_collectors = [AppCollector]
+  c.web_type_collectors = [AppTypeCollector.new]
+  c.resque_collectors = [AppCollector]
+  c.resque_type_collectors = [AppTypeCollector.new]
+  c.hutch_collectors = [AppCollector]
+  c.hutch_type_collectors = [AppTypeCollector.new]
+end
+```
+
+#### Custom Server Integrations
+
+For custom integrations that initialize their own server, you'll need to pass your TypeCollector instance via the 
+`.add_type_collector` method on the prometheus server instance before starting it:
+
+```ruby
+server = ::Bigcommerce::Prometheus::Server.new
+Bigcommerce::Prometheus.web_type_collectors.each do |tc|
+  server.add_type_collector(tc)
+end
+
+# and for polling:
+
+AppCollector.start
+```
+
 ## License
 
 Copyright (c) 2019-present, BigCommerce Pty. Ltd. All rights reserved 

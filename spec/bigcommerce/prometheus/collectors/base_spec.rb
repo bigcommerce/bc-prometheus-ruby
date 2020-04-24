@@ -20,29 +20,29 @@ require 'spec_helper'
 
 describe Bigcommerce::Prometheus::Collectors::Base do
   let(:client) { double(:client, send_json: true) }
-  let(:collector) { Test::DynamicCollector.new(client: client, frequency: 0) }
+  let(:collector) { AppCollector.new(client: client, frequency: 0) }
 
   describe '.run' do
     subject { collector.run }
 
     it 'should collect and push the metrics, then sleep the frequency' do
       expect(client).to receive(:send_json).with(
-        type: 'test_dynamic',
-        bonks: 42
+        type: 'app',
+        points: 42
       ).once
       subject
     end
   end
 
-  describe '.add_widget' do
-    subject { collector.add_widget }
+  describe '.honk!' do
+    subject { collector.honk! }
 
     it 'should push the metric dynamically' do
       expect(client).to receive(:send_json).with(
-        type: 'test_dynamic',
-        widgets: 1,
+        type: 'app',
+        honks: 1,
         custom_labels: {
-          shape: 'round'
+          volume: 'loud'
         }
       ).once
       subject
