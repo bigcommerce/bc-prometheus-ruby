@@ -2,6 +2,8 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+### 0.3.0
+
 - Support for only Ruby 2.6+ going forward
 - Updated README around custom metrics and collectors
 - Add ability to pass custom resque and hutch Collectors/TypeCollectors
