@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Copyright (c) 2019-present, BigCommerce Pty. Ltd. All rights reserved
+# Copyright (c) 2020-present, BigCommerce Pty. Ltd. All rights reserved
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -15,8 +15,36 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-module Bigcommerce
-  module Prometheus
-    VERSION = '0.3.0.pre'
+# frozen_string_literal: true
+
+module Test
+  class DynamicCollector < ::Bigcommerce::Prometheus::Collectors::Base
+    def add_widget
+      push(
+        widgets: 1,
+        custom_labels: {
+          shape: 'round'
+        }
+      )
+    end
+
+    def collect(metrics)
+      metrics[:bonks] = 42
+      metrics
+    end
+  end
+
+  class DynamicTypeCollector < ::Bigcommerce::Prometheus::TypeCollectors::Base
+    def build_metrics
+      {
+        bonks: PrometheusExporter::Metric::Counter.new('bonks', 'Running counter of bonks'),
+        widgets: PrometheusExporter::Metric::Gauge.new('widgets', 'Current amount of widgets')
+      }
+    end
+
+    def collect_metrics(data:, labels: {})
+      metric(:widgets).observe(data.fetch('widgets', 0), labels)
+      metric(:bonks).observe(1, labels) if data.fetch('bonks', 0).to_i.positive?
+    end
   end
 end

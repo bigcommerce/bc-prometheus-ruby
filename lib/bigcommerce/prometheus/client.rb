@@ -24,16 +24,16 @@ module Bigcommerce
       include Singleton
       include Loggable
 
-      def initialize
+      def initialize(host: nil, port: nil, max_queue_size: nil, thread_sleep: nil, custom_labels: nil, process_name: nil)
         super(
-          host: Bigcommerce::Prometheus.server_host,
-          port: Bigcommerce::Prometheus.server_port,
-          max_queue_size: Bigcommerce::Prometheus.client_max_queue_size,
-          thread_sleep: Bigcommerce::Prometheus.client_thread_sleep,
-          custom_labels: Bigcommerce::Prometheus.client_custom_labels
+          host: host || Bigcommerce::Prometheus.server_host,
+          port: port || Bigcommerce::Prometheus.server_port,
+          max_queue_size: max_queue_size || Bigcommerce::Prometheus.client_max_queue_size,
+          thread_sleep: thread_sleep || Bigcommerce::Prometheus.client_thread_sleep,
+          custom_labels: custom_labels || Bigcommerce::Prometheus.client_custom_labels
         )
         PrometheusExporter::Client.default = self
-        @process_name = ::Bigcommerce::Prometheus.process_name
+        @process_name = process_name || ::Bigcommerce::Prometheus.process_name
       end
 
       ##
@@ -55,7 +55,7 @@ module Bigcommerce
 
       ##
       # @param [String] path
-      # @return [URI]
+      # @return [Module<URI>]
       #
       def uri_path(path)
         URI("http://#{@host}:#{@port}#{path}")

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Copyright (c) 2019-present, BigCommerce Pty. Ltd. All rights reserved
+# Copyright (c) 2020-present, BigCommerce Pty. Ltd. All rights reserved
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -15,8 +15,37 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-module Bigcommerce
-  module Prometheus
-    VERSION = '0.3.0.pre'
+
+require 'spec_helper'
+
+describe Bigcommerce::Prometheus::Collectors::Base do
+  let(:client) { double(:client, send_json: true) }
+  let(:collector) { Test::DynamicCollector.new(client: client, frequency: 0) }
+
+  describe '.run' do
+    subject { collector.run }
+
+    it 'should collect and push the metrics, then sleep the frequency' do
+      expect(client).to receive(:send_json).with(
+        type: 'test_dynamic',
+        bonks: 42
+      ).once
+      subject
+    end
+  end
+
+  describe '.add_widget' do
+    subject { collector.add_widget }
+
+    it 'should push the metric dynamically' do
+      expect(client).to receive(:send_json).with(
+        type: 'test_dynamic',
+        widgets: 1,
+        custom_labels: {
+          shape: 'round'
+        }
+      ).once
+      subject
+    end
   end
 end

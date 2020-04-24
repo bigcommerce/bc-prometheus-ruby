@@ -31,6 +31,8 @@ module Bigcommerce
           @server_port = Bigcommerce::Prometheus.server_port
           @server_timeout = Bigcommerce::Prometheus.server_timeout
           @server_prefix = Bigcommerce::Prometheus.server_prefix
+          @collectors = Bigcommerce::Prometheus.resque_collectors || []
+          @type_collectors = Bigcommerce::Prometheus.resque_type_collectors || []
         end
 
         ##
@@ -44,6 +46,9 @@ module Bigcommerce
 
           server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
           server.add_type_collector(Bigcommerce::Prometheus::TypeCollectors::Resque.new)
+          @type_collectors.each do |tc|
+            server.add_type_collector(tc)
+          end
           server.start
           setup_middleware
         rescue StandardError => e
@@ -63,7 +68,8 @@ module Bigcommerce
         def setup_middleware
           logger.info "[bigcommerce-prometheus][#{@process_name}] Setting up resque prometheus middleware"
           ::Resque.before_first_fork do
-            ::Bigcommerce::Prometheus::Integrations::Resque.start
+            ::Bigcommerce::Prometheus::Integrations::Resque.start(client: Bigcommerce::Prometheus.client)
+            @collectors.each(&:start)
           end
         end
       end

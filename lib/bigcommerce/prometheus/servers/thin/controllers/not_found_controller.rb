@@ -26,7 +26,7 @@ module Bigcommerce
           class NotFoundController < BaseController
             def call
               @response.status = 404
-              @response.body << 'Not Found! The Prometheus Ruby Exporter only listens on /metrics and /send-metrics'
+              @response.body << Bigcommerce::Prometheus.not_found_body
             end
           end
         end
