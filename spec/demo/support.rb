@@ -28,34 +28,3 @@ class Puma
     }.to_json
   end
 end
-
-# Custom type collector
-module Demo
-  class GeeseTypeCollector < Bigcommerce::Prometheus::TypeCollectors::Base
-    def build_metrics
-      {
-        geese_total: PrometheusExporter::Metric::Gauge.new('geese_total', 'Number of geese'),
-        honks: PrometheusExporter::Metric::Counter.new('honks', 'Number of honks')
-      }
-    end
-
-    def collect_metrics(data:, labels: {})
-      metric(:geese_total)&.observe(data['geese_total'], labels)
-      metric(:honks).observe(1, labels) if data.fetch('honks', 0).to_i.positive?
-    end
-  end
-
-  # Custom collector
-  class GeeseCollector < Bigcommerce::Prometheus::Collectors::Base
-    def honk
-      push(
-        honks: 1
-      )
-    end
-
-    def collect(metrics)
-      metrics[:geese_total] = rand(100)
-      metrics
-    end
-  end
-end

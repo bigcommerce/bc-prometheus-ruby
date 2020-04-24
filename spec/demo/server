@@ -20,7 +20,7 @@ ENV['PROCESS'] = 'demo'
 $LOAD_PATH.unshift File.expand_path('../../../lib', __FILE__)
 require 'bigcommerce/prometheus'
 require 'logger'
-require_relative 'support'
+require_relative '../support/collectors'
 
 logger = ::Logger.new(STDOUT)
 logger.level = ::Logger::Severity::INFO
@@ -30,25 +30,25 @@ logger.level = ::Logger::Severity::INFO
   c.server_host = '0.0.0.0'
   c.logger = logger
   c.puma_collection_frequency = 5
-  c.web_collectors = [Demo::GeeseCollector]
-  c.web_type_collectors = [Demo::GeeseTypeCollector.new]
+  c.web_collectors = [AppCollector]
+  c.web_type_collectors = [AppTypeCollector.new]
 end
 
 server = ::Bigcommerce::Prometheus::Server.new
+server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
+server.add_type_collector(PrometheusExporter::Server::WebCollector.new)
+server.add_type_collector(PrometheusExporter::Server::PumaCollector.new)
 Bigcommerce::Prometheus.web_type_collectors.each do |tc|
-  server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
-  server.add_type_collector(PrometheusExporter::Server::WebCollector.new)
-  server.add_type_collector(PrometheusExporter::Server::PumaCollector.new)
   server.add_type_collector(tc)
 end
 server.start_until_stopped do
   sleep 2
   ::Bigcommerce::Prometheus::Integrations::Puma.start
-  Demo::GeeseCollector.start
+  AppCollector.start
 
-  collector = Demo::GeeseCollector.new
+  collector = AppCollector.new
   loop do
-    collector.honk # ad hoc metric
+    collector.honk! # ad hoc metric
     logger.info 'HONK!'
     sleep 3
   end
