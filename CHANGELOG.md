@@ -2,6 +2,8 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+- Update prometheus_exporter dependency to ~> 0.5 to fix memory leaks
+
 ### 0.3.0
 
 - Support for only Ruby 2.6+ going forward
