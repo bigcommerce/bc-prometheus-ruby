@@ -35,7 +35,7 @@ module Bigcommerce
             @metrics_total = ::PrometheusExporter::Metric::Counter.new('collector_metrics_total', 'Total metrics processed by exporter.')
             @sessions_total = ::PrometheusExporter::Metric::Counter.new('collector_sessions_total', 'Total send_metric sessions processed by exporter.')
             @bad_metrics_total = ::PrometheusExporter::Metric::Counter.new('collector_bad_metrics_total', 'Total mis-handled metrics by collector.')
-            @collector_working_gauge = ::PrometheusExporter::Metric::Gauge.new('collector_working', 'Is the master process collector able to collect metrics')
+            @collector_working_gauge = ::PrometheusExporter::Metric::Gauge.new('collector_working', 'Is the main process collector able to collect metrics')
             @collector_rss_gauge = ::PrometheusExporter::Metric::Gauge.new('collector_rss', 'total memory used by collector process')
           end
 
