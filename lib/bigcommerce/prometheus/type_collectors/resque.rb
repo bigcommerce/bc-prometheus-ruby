@@ -25,6 +25,8 @@ module Bigcommerce
         ##
         # Initialize the collector
         #
+        # @return [Hash]
+        #
         def build_metrics
           {
             workers_total: PrometheusExporter::Metric::Gauge.new('resque_workers_total', 'Number of active workers'),

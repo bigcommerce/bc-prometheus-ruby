@@ -20,10 +20,10 @@ require 'spec_helper'
 describe Bigcommerce::Prometheus::TypeCollectors::Resque do
   let(:type_collector) { described_class.new }
 
-  describe '.build_metrics' do
+  describe '#build_metrics' do
     subject { type_collector.build_metrics }
 
-    it 'should return a hash of prometheus metric objects' do
+    it 'returns a hash of prometheus metric objects' do
       expect(subject).to be_a(Hash)
       expect(subject.count).to eq 6
     end
@@ -61,7 +61,7 @@ describe Bigcommerce::Prometheus::TypeCollectors::Resque do
       },
 
     }.each do |hash_key, config|
-      it "should build the #{hash_key} with stat key of #{config[:key]}" do
+      it "builds the #{hash_key} with stat key of #{config[:key]}" do
         metric = subject[hash_key]
         expect(metric).to be_a config[:class]
         expect(metric.name).to eq config[:name]
@@ -70,7 +70,9 @@ describe Bigcommerce::Prometheus::TypeCollectors::Resque do
     end
   end
 
-  describe '.collect_metrics' do
+  describe '#collect_metrics' do
+    subject { type_collector.collect_metrics(data: data, labels: labels) }
+
     let(:labels) { { environment: 'development' } }
     let(:data) do
       {
@@ -87,9 +89,7 @@ describe Bigcommerce::Prometheus::TypeCollectors::Resque do
       }
     end
 
-    subject { type_collector.collect_metrics(data: data, labels: labels) }
-
-    it 'should properly log metrics for all passed values' do
+    it 'properly logs metrics for all passed values' do
       metrics = type_collector.instance_variable_get(:@metrics)
 
       expect(metrics[:workers_total]).to receive(:observe).with(data['workers_total'], labels)

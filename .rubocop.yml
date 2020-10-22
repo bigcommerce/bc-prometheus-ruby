@@ -8,15 +8,13 @@ AllCops:
     - tmp/**/*
     - log/**/*
     - Rakefile
-    - bc-prometheus-ruby.gemspec
-    - lib/bigcommerce/prometheus/configuration.rb
 
 # Allow *VALID_CONFIG_KEYS.keys
 Lint/AmbiguousOperator:
   Enabled: false
 
 # This cop conflicts with other cops
-Metrics/LineLength:
+Layout/LineLength:
   Enabled: false
 
 Metrics/MethodLength:

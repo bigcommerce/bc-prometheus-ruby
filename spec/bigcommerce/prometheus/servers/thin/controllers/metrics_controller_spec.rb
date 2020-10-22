@@ -38,10 +38,10 @@ describe Bigcommerce::Prometheus::Servers::Thin::Controllers::MetricsController 
     allow(server_metrics).to receive(:to_prometheus_text).and_return(server_metrics_text)
   end
 
-  describe '.call' do
+  describe '#call' do
     subject { controller.call }
 
-    it 'should succeed' do
+    it 'succeeds' do
       expect(subject.status).to eq 200
       expect(subject.body.first).to eq 'collector_working 1
 collector_rss 60440
@@ -49,13 +49,13 @@ ruby_collector_metrics_total 19
 ruby_collector_sessions_total 19'
     end
 
-    context 'if the metrics fail to parse' do
+    context 'when the metrics fail to parse' do
       let(:timeout_exception) { ::Timeout::Error }
       before do
         allow(collector).to receive(:prometheus_metrics_text).and_raise(timeout_exception)
       end
 
-      it 'should still respond 200 but log an error' do
+      it 'still responds 200, but logs an error' do
         expect(logger).to receive(:error).with('Generating Prometheus metrics text timed out')
         expect(subject.status).to eq 200
         expect(subject.body.first).to eq 'collector_working 1

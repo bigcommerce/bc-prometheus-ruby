@@ -29,6 +29,7 @@ module Bigcommerce
         # @param [Hash] default_labels
         #
         def initialize(type: nil, default_labels: {})
+          super()
           @type = type || self.class.to_s.downcase.gsub('::', '_').gsub('typecollector', '')
           @default_labels = default_labels || {}
           @metrics = build_metrics

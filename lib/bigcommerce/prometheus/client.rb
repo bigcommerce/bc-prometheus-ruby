@@ -24,6 +24,14 @@ module Bigcommerce
       include Singleton
       include Loggable
 
+      ##
+      # @param [String] host
+      # @param [Integer] port
+      # @param [Integer] max_queue_size
+      # @param [Integer|Float] thread_sleep
+      # @param [Hash] custom_labels
+      # @param [String] process_name
+      #
       def initialize(host: nil, port: nil, max_queue_size: nil, thread_sleep: nil, custom_labels: nil, process_name: nil)
         super(
           host: host || Bigcommerce::Prometheus.server_host,

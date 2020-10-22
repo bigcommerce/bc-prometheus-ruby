@@ -20,14 +20,14 @@ require 'spec_helper'
 describe Bigcommerce::Prometheus::Client do
   let(:client) { described_class.instance }
 
-  describe '.initialize' do
+  describe '#initialize' do
     subject { client }
 
-    it 'should initialize the client object from the singleton' do
+    it 'initializes the client object from the singleton' do
       expect(subject).to be_a(described_class)
     end
 
-    it 'should behave like a singleton' do
+    it 'behaves like a singleton' do
       ref1 = described_class.instance
       ref2 = described_class.instance
       expect(ref1).to eq ref2

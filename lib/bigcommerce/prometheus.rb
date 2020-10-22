@@ -58,6 +58,9 @@ module Bigcommerce
   module Prometheus
     extend Configuration
 
+    ##
+    # @return [Bigcommerce::Prometheus::Client]
+    #
     def self.client
       Client.instance
     end
