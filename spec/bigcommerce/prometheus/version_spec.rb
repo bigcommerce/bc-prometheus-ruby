@@ -17,7 +17,7 @@ require 'spec_helper'
 
 describe Bigcommerce::Prometheus do
   describe 'version' do
-    it 'should have a version' do
+    it 'has a version' do
       expect(Bigcommerce::Prometheus::VERSION).to be_a(String)
     end
   end

@@ -78,7 +78,7 @@ module Bigcommerce
         @server.stop!
         @run_thread.kill
         @running = false
-        STDOUT.puts "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter cleanly shut down"
+        $stdout.puts "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter cleanly shut down"
       rescue ::StandardError => e
         warn "[bigcommerce-prometheus][#{@process_name}] Failed to stop exporter: #{e.message}"
       end

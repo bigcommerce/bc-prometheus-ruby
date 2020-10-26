@@ -30,29 +30,29 @@ describe Bigcommerce::Prometheus::Servers::Thin::Controllers::SendMetricsControl
   let(:server_metrics) { Bigcommerce::Prometheus::Servers::Thin::ServerMetrics.new }
   let(:controller) { described_class.new(request: request, response: response, server_metrics: server_metrics, collector: collector, logger: logger) }
 
-  describe '.call' do
+  describe '#call' do
     subject { controller.call }
 
     context 'when a post request' do
-      context 'and the collector properly parses the metrics' do
+      context 'when the collector properly parses the metrics' do
         before do
           expect(collector).to receive(:process).once
         end
 
-        it 'should succeed' do
+        it 'succeeds' do
           expect(subject.status).to eq 200
           expect(subject.body.first).to eq 'OK'
         end
       end
 
-      context 'and the collector fails to parse the metrics' do
+      context 'when the collector fails to parse the metrics' do
         let(:error_message) { 'failure!' }
         let(:exception) { StandardError.new(error_message) }
         before do
           expect(collector).to receive(:process).once.and_raise(exception)
         end
 
-        it 'should fail' do
+        it 'fails' do
           expect(subject.status).to eq 500
           parsed_body = JSON.parse(subject.body.first)
           expect(parsed_body).to eq [error_message]
@@ -63,7 +63,7 @@ describe Bigcommerce::Prometheus::Servers::Thin::Controllers::SendMetricsControl
     context 'when not a post request' do
       let(:request_method) { 'GET' }
 
-      it 'should fail' do
+      it 'fails' do
         expect(subject.status).to eq 500
         parsed_body = JSON.parse(subject.body.first)
         expect(parsed_body).to eq ['Invalid request type. Only POST is supported.']

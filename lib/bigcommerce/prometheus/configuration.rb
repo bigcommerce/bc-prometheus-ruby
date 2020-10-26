@@ -76,6 +76,7 @@ module Bigcommerce
         reset unless @configured
         yield self
         @configured = true
+        self
       end
 
       ##
@@ -118,8 +119,8 @@ module Bigcommerce
           self.logger = Application.logger
         else
           require 'logger'
-          self.logger = ::Logger.new(STDOUT)
-          self.logger.level = ::Logger::Severity::INFO
+          self.logger = ::Logger.new($stdout)
+          logger.level = ::Logger::Severity::INFO
         end
       end
 

@@ -14,17 +14,13 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 ENV['RACK_ENV'] = 'test'
-$LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 require_relative 'simplecov_helper'
 require 'bigcommerce/prometheus'
 require 'pry'
-Dir["#{File.join(File.dirname(__FILE__), 'support')}/**/*.rb"].each {|f| require f }
+Dir["#{File.join(File.dirname(__FILE__), 'support')}/**/*.rb"].sort.each { |f| require f }
 
 RSpec.configure do |config|
-  config.alias_example_to :fit, focus: true
-  config.filter_run focus: true
-  config.filter_run_excluding broken: true
-  config.run_all_when_everything_filtered = true
   config.expose_current_running_example_as :example
   config.mock_with :rspec do |mocks|
     mocks.allow_message_expectations_on_nil = true
