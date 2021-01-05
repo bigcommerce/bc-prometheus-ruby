@@ -25,6 +25,7 @@ module Bigcommerce
           #
           class SendMetricsController < BaseController
             class BadMetricsError < StandardError; end
+
             class InvalidRequestError < StandardError; end
 
             ##
