@@ -23,7 +23,7 @@ module Bigcommerce
         # Thin adapter for server
         #
         class Server < ::Thin::Server
-          def initialize(port:, host: nil, timeout: nil, logger: nil)
+          def initialize(port: nil, host: nil, timeout: nil, logger: nil, thread_pool_size: nil)
             @port = port || ::Bigcommerce::Prometheus.server_port
             @host = host || ::Bigcommerce::Prometheus.server_host
             @timeout = timeout || ::Bigcommerce::Prometheus.server_timeout
@@ -31,6 +31,7 @@ module Bigcommerce
             @rack_app = ::Bigcommerce::Prometheus::Servers::Thin::RackApp.new(timeout: timeout, logger: logger)
             super(@host, @port, @rack_app)
             ::Thin::Logging.logger = @logger
+            self.threadpool_size = (thread_pool_size || ::Bigcommerce::Prometheus.server_thread_pool_size).to_i
           end
 
           ##

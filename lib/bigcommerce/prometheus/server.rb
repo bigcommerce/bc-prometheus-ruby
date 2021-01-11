@@ -26,15 +26,21 @@ module Bigcommerce
       # @param [Integer] port
       # @param [Integer] timeout
       # @param [String] prefix
+      # @param [Integer] thread_pool_size
       #
-      def initialize(host: nil, port: nil, timeout: nil, prefix: nil, logger: nil)
+      def initialize(host: nil, port: nil, timeout: nil, prefix: nil, logger: nil, thread_pool_size: nil)
         @host = host || ::Bigcommerce::Prometheus.server_host
         @port = (port || ::Bigcommerce::Prometheus.server_port).to_i
         @timeout = (timeout || ::Bigcommerce::Prometheus.server_timeout).to_i
         @prefix = (prefix || ::PrometheusExporter::DEFAULT_PREFIX).to_s
         @process_name = ::Bigcommerce::Prometheus.process_name
         @logger = logger || ::Bigcommerce::Prometheus.logger
-        @server = ::Bigcommerce::Prometheus::Servers::Thin::Server.new(port: @port, timeout: @timeout, logger: @logger)
+        @server = ::Bigcommerce::Prometheus::Servers::Thin::Server.new(
+          port: @port,
+          timeout: @timeout,
+          logger: @logger,
+          thread_pool_size: (thread_pool_size || ::Bigcommerce::Prometheus.server_thread_pool_size).to_i
+        )
         @running = false
         ::PrometheusExporter::Metric::Base.default_prefix = @prefix
         setup_signal_handlers
@@ -51,7 +57,7 @@ module Bigcommerce
         end
         @running = true
 
-        @logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter started on #{@host}:#{@port}"
+        @logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter started on #{@host}:#{@port} with #{@server.threadpool_size} threads"
 
         @server
       rescue ::StandardError => e

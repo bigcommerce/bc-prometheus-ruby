@@ -42,6 +42,7 @@ module Bigcommerce
         server_port: ENV.fetch('PROMETHEUS_SERVER_PORT', PrometheusExporter::DEFAULT_PORT).to_i,
         server_timeout: ENV.fetch('PROMETHEUS_DEFAULT_TIMEOUT', PrometheusExporter::DEFAULT_TIMEOUT).to_i,
         server_prefix: ENV.fetch('PROMETHEUS_DEFAULT_PREFIX', PrometheusExporter::DEFAULT_PREFIX).to_s,
+        server_thread_pool_size: ENV.fetch('PROMETHEUS_SERVER_THREAD_POOL_SIZE', 3).to_i,
 
         # Custom collector configuration
         collector_collection_frequency: ENV.fetch('PROMETHEUS_DEFAULT_COLLECTOR_COLLECTION_FREQUENCY_SEC', 15).to_i,
