@@ -2,6 +2,8 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+### 0.4.0
+
 - Add configuration to control Thin web server thread pool size. Note that the default number of threads is changing from 20 to 3. You can configure this using an environment variable or initializer.
 - Update rubocop to 1.0
 
