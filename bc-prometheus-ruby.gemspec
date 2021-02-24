@@ -43,6 +43,6 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency 'simplecov', '>= 0.16'
 
   spec.add_runtime_dependency 'bigcommerce-multitrap', '~> 0.1'
-  spec.add_runtime_dependency 'prometheus_exporter', '~> 0.5'
+  spec.add_runtime_dependency 'prometheus_exporter', '~> 0.7'
   spec.add_runtime_dependency 'thin', '~> 1.7'
 end
