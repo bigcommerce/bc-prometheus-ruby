@@ -23,7 +23,7 @@ module Bigcommerce
       #
       class Railtie < ::Rails::Railtie
         initializer 'zzz.bc_prometheus_ruby.configure_rails_initialization' do |app|
-          Bigcommerce::Prometheus::Instrumentors::Web.new(app: app).start
+          Bigcommerce::Prometheus::Instrumentors::Web.new(app: app).start unless ::Bigcommerce::Prometheus.web_disable_automatic_instrumentation
         end
       end
     end

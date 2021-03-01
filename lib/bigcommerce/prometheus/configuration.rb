@@ -51,7 +51,10 @@ module Bigcommerce
         resque_collectors: [],
         resque_type_collectors: [],
         web_collectors: [],
-        web_type_collectors: []
+        web_type_collectors: [],
+
+        # Additional configuration
+        web_disable_automatic_instrumentation: ENV.fetch('PROMETHEUS_WEB_DISABLE_AUTOMATIC_INSTRUMENTATION', 0).to_i.positive?
       }.freeze
 
       attr_accessor *VALID_CONFIG_KEYS.keys
