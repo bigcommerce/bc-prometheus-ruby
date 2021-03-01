@@ -54,7 +54,7 @@ module Bigcommerce
         web_type_collectors: [],
 
         # Additional configuration
-        web_disable_automatic_instrumentation: ENV.fetch('PROMETHEUS_WEB_DISABLE_AUTOMATIC_INSTRUMENTATION', 0).to_i.positive?
+        railtie_disabled: ENV.fetch('PROMETHEUS_DISABLE_RAILTIE', 0).to_i.positive?
       }.freeze
 
       attr_accessor *VALID_CONFIG_KEYS.keys

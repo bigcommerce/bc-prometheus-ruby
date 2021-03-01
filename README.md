@@ -44,12 +44,12 @@ After requiring the main file, you can further configure with:
 | client_custom_labels | A hash of custom labels to send with each client request | `{}` | None |
 | client_max_queue_size | The max amount of metrics to send before flushing | `10000` | `ENV['PROMETHEUS_CLIENT_MAX_QUEUE_SIZE']` |
 | client_thread_sleep | How often to sleep the worker thread that manages the client buffer (seconds) | `0.5` | `ENV['PROMETHEUS_CLIENT_THREAD_SLEEP']` |
-| disable_web_automatic_instrumentation | Opt out flag for Web instrumentation; use `Bigcommerce::Prometheus::Instrumentors::Web.new(app: Rails.application).start` in your app's code to start it up yourself  | `0` | `ENV['PROMETHEUS_WEB_DISABLE_AUTOMATIC_INSTRUMENTATION']` |
 | puma_collection_frequency | How often to poll puma collection metrics (seconds) | `30` | `ENV['PROMETHEUS_PUMA_COLLECTION_FREQUENCY']` |
 | server_host | The host to run the exporter on | `"0.0.0.0"` | `ENV['PROMETHEUS_SERVER_HOST']` |
 | server_port | The port to run the exporter on | `9394` | `ENV['PROMETHEUS_SERVER_PORT']` |
 | server_thread_pool_size | The number of threads used for the exporter server | `3` | `ENV['PROMETHEUS_SERVER_THREAD_POOL_SIZE']` |
 | process_name | What the current process name is (used in logging) | `"unknown"` | `ENV['PROCESS']` |
+| railtie_disabled | Opt out flag for Railtie; use `Bigcommerce::Prometheus::Instrumentors::Web.new(app: Rails.application).start` in your app's code to start it up yourself  | `0` | `ENV['PROMETHEUS_DISABLE_RAILTIE']` |
 
 ## Custom Collectors
 
