@@ -49,6 +49,7 @@ After requiring the main file, you can further configure with:
 | server_port | The port to run the exporter on | `9394` | `ENV['PROMETHEUS_SERVER_PORT']` |
 | server_thread_pool_size | The number of threads used for the exporter server | `3` | `ENV['PROMETHEUS_SERVER_THREAD_POOL_SIZE']` |
 | process_name | What the current process name is (used in logging) | `"unknown"` | `ENV['PROCESS']` |
+| railtie_disabled | Opt out flag for Railtie; use `Bigcommerce::Prometheus::Instrumentors::Web.new(app: Rails.application).start` in your app's code to start it up yourself  | `0` | `ENV['PROMETHEUS_DISABLE_RAILTIE']` |
 
 ## Custom Collectors
 
