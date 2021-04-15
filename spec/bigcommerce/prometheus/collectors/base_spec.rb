@@ -22,6 +22,18 @@ describe Bigcommerce::Prometheus::Collectors::Base do
   let(:client) { double(:client, send_json: true) }
   let(:collector) { AppCollector.new(client: client, frequency: 0) }
 
+  describe '#start' do
+    subject { AppCollector.start(client: client, frequency: 0) }
+
+    it 'starts the collector on a thread' do
+      thread = subject
+      expect(thread).to be_a(Thread)
+      expect(thread).to be_alive
+    ensure
+      AppCollector.stop
+    end
+  end
+
   describe '#run' do
     subject { collector.run }
 

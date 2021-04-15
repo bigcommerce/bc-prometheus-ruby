@@ -25,8 +25,8 @@ module Bigcommerce
         ##
         # Start the collector
         #
-        def self.start(*args, &block)
-          process_collector = new(*args, &block)
+        def self.start(args, &block)
+          process_collector = new(**args, &block)
 
           stop if @thread
 

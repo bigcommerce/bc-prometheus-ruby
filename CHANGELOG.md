@@ -2,6 +2,10 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+### 0.5.1
+
+- Fix keywords argument issue with Collectors::Base and Ruby 3.0+
+
 ### 0.5.0
 
 - Add configuration to disable the Railtie that activates the web instrumentor automatically. This allows applications to choose how and when this is initialized.
