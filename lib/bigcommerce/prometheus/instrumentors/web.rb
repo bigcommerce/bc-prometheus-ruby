@@ -62,7 +62,7 @@ module Bigcommerce
         end
 
         def setup_before_fork
-          @app.config.before_fork_callbacks = [] unless @app.config.before_fork_callbacks
+          @app.config.before_fork_callbacks = [] unless config_defined?(:before_fork_callbacks)
           @app.config.before_fork_callbacks << lambda do
             server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
             server.add_type_collector(PrometheusExporter::Server::WebCollector.new)
@@ -75,11 +75,15 @@ module Bigcommerce
         end
 
         def setup_after_fork
-          @app.config.after_fork_callbacks = [] unless @app.config.after_fork_callbacks
+          @app.config.after_fork_callbacks = [] unless config_defined?(:after_fork_callbacks)
           @app.config.after_fork_callbacks << lambda do
             ::Bigcommerce::Prometheus::Integrations::Puma.start(client: Bigcommerce::Prometheus.client)
             @collectors.each(&:start)
           end
+        end
+
+        def config_defined?(config_name)
+          @app.config.respond_to?(config_name) && @app.config.public_send(config_name)
         end
 
         def setup_middleware
