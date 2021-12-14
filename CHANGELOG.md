@@ -2,6 +2,8 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+## 0.5.2
+
 - Better error handling post-fork for web/resque instrumentors
 - Fix issue with using `Collectors::Base` and keyword arguments in Ruby 2.7
 - Remove null-logger development dependency
