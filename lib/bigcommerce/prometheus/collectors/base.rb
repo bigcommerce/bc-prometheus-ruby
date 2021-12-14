@@ -25,7 +25,10 @@ module Bigcommerce
         ##
         # Start the collector
         #
-        def self.start(args, &block)
+        # @param [Hash] args
+        #
+        def self.start(args = {}, &block)
+          args ||= {}
           process_collector = new(**args, &block)
 
           stop if @thread
