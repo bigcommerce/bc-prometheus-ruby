@@ -79,13 +79,15 @@ module Bigcommerce
           @app.config.after_fork_callbacks << lambda do
             ::Bigcommerce::Prometheus::Integrations::Puma.start(client: Bigcommerce::Prometheus.client)
             @collectors.each(&:start)
+          rescue StandardError => e
+            logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to start web prometheus middleware after fork: #{e.message}"
           end
         end
 
         def setup_middleware
           @app.middleware.unshift(PrometheusExporter::Middleware, client: Bigcommerce::Prometheus.client)
         rescue StandardError => e
-          logger.warn "[bc-prometheus-ruby] Failed to attach app middleware in web instrumentor: #{e.message}"
+          logger.warn "[bigcommerce-prometheus] Failed to attach app middleware in web instrumentor: #{e.message}"
         end
       end
     end

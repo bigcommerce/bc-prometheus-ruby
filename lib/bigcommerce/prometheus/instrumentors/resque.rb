@@ -70,6 +70,8 @@ module Bigcommerce
           ::Resque.before_first_fork do
             ::Bigcommerce::Prometheus::Integrations::Resque.start(client: Bigcommerce::Prometheus.client)
             @collectors.each(&:start)
+          rescue StandardError => e
+            logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to start resque prometheus middleware after fork: #{e.message}"
           end
         end
       end

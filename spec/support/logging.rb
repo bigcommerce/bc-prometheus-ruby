@@ -15,8 +15,6 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-require 'null_logger'
-
 module LoggerHelper
   def logger
     Bigcommerce::Prometheus.logger
@@ -25,7 +23,7 @@ end
 
 RSpec.configure do |config|
   config.before do
-    Bigcommerce::Prometheus.logger = NullLogger.new unless ENV.fetch('DEBUG', 0).to_i.positive?
+    Bigcommerce::Prometheus.logger = ::Logger.new(::File::NULL) unless ::ENV.fetch('DEBUG', 0).to_i.positive?
   end
 
   include LoggerHelper
