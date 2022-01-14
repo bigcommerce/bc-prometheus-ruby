@@ -2,6 +2,10 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+- Add support for Ruby 3.1
+- Drop support for Ruby 2.6
+- Add CodeClimate analysis
+
 ## 0.5.2
 
 - Better error handling post-fork for web/resque instrumentors
