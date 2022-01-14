@@ -1,6 +1,6 @@
 # bc-prometheus-ruby - Drop-in Prometheus metrics
 
-[![CircleCI](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby.svg?style=svg&circle-token=fc3e2c4405a1f53a31e298f0ef981c2d0dfdee90)](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby) [![Gem Version](https://badge.fury.io/rb/bc-prometheus-ruby.svg)](https://badge.fury.io/rb/bc-prometheus-ruby) [![Documentation](https://inch-ci.org/github/bigcommerce/bc-prometheus-ruby.svg?branch=main)](https://inch-ci.org/github/bigcommerce/bc-prometheus-ruby?branch=main)
+[![CircleCI](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby.svg?style=svg&circle-token=fc3e2c4405a1f53a31e298f0ef981c2d0dfdee90)](https://circleci.com/gh/bigcommerce/bc-prometheus-ruby) [![Gem Version](https://badge.fury.io/rb/bc-prometheus-ruby.svg)](https://badge.fury.io/rb/bc-prometheus-ruby) [![Documentation](https://inch-ci.org/github/bigcommerce/bc-prometheus-ruby.svg?branch=main)](https://inch-ci.org/github/bigcommerce/bc-prometheus-ruby?branch=main) [![Maintainability](https://api.codeclimate.com/v1/badges/4a06277c738245e8bac1/maintainability)](https://codeclimate.com/github/bigcommerce/bc-prometheus-ruby/maintainability) [![Test Coverage](https://api.codeclimate.com/v1/badges/4a06277c738245e8bac1/test_coverage)](https://codeclimate.com/github/bigcommerce/bc-prometheus-ruby/test_coverage)
 
 ## Installation
 
