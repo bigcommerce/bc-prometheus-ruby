@@ -78,7 +78,7 @@ module Bigcommerce
             message = @queue.pop
             Net::HTTP.post(uri_path('/send-metrics'), message)
           rescue StandardError => e
-            logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter is dropping a message tp #{uri_path('/send-metrics')}: #{e}"
+            logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter is dropping a message to #{uri_path('/send-metrics')}: #{e}"
             raise
           end
         end
