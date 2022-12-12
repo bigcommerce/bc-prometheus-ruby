@@ -38,10 +38,10 @@ describe Bigcommerce::Prometheus::Collectors::Base do
     subject { collector.run }
 
     it 'collects and pushes the metrics, then sleeps the frequency' do
-      expect(client).to receive(:send_json).with(
+      expect(client).to receive(:send_json).with({
         type: 'app',
         points: 42
-      ).once
+      }).once
       subject
     end
   end
@@ -50,13 +50,13 @@ describe Bigcommerce::Prometheus::Collectors::Base do
     subject { collector.honk! }
 
     it 'pushes the metric dynamically' do
-      expect(client).to receive(:send_json).with(
+      expect(client).to receive(:send_json).with({
         type: 'app',
         honks: 1,
         custom_labels: {
           volume: 'loud'
         }
-      ).once
+      }).once
       subject
     end
   end
