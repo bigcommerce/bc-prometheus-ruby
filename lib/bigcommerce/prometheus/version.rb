@@ -17,6 +17,6 @@
 #
 module Bigcommerce
   module Prometheus
-    VERSION = '0.5.3.pre'
+    VERSION = '0.6.0.pre'
   end
 end
