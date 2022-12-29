@@ -2,7 +2,7 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
-- Add support for Ruby 3.1
+- Add support for Ruby 3.1/3.2
 - Drop support for Ruby 2
 - Add CodeClimate analysis
 
