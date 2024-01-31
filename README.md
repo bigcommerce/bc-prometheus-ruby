@@ -14,6 +14,14 @@ Then in your `application.rb`, prior to extending `Rails::Application` or any in
 require 'bigcommerce/prometheus'
 ```
 
+Then in your web server config file (e.g. `puma.rb`)
+
+```ruby
+before_fork do
+  Rails.application.config.before_fork_callbacks.each(&:call)
+end
+```
+
 You can then view your metrics at: http://0.0.0.0:9394/metrics
 
 ## Puma
@@ -21,10 +29,6 @@ You can then view your metrics at: http://0.0.0.0:9394/metrics
 For extra Puma metrics, add this to `config/puma.rb`:
 
 ```ruby
-before_fork do
-  Rails.application.config.before_fork_callbacks.each(&:call)
-end
-
 after_worker_fork do
   Rails.application.config.after_fork_callbacks.each(&:call)
 end
