@@ -33,15 +33,8 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
   spec.required_ruby_version = '>= 3.0'
 
-  spec.add_development_dependency 'bundler-audit', '>= 0.6'
-  spec.add_development_dependency 'pry', '>= 0.12'
-  spec.add_development_dependency 'rake', '>= 10.0'
-  spec.add_development_dependency 'rspec', '>= 3.8'
-  spec.add_development_dependency 'rspec_junit_formatter', '>= 0.4'
-  spec.add_development_dependency 'rubocop', '>= 1.0'
-  spec.add_development_dependency 'simplecov', '>= 0.16'
-
   spec.add_runtime_dependency 'bigcommerce-multitrap', '~> 0.1'
   spec.add_runtime_dependency 'prometheus_exporter', '~> 0.7'
+  spec.add_runtime_dependency 'rake', '>= 10.0'
   spec.add_runtime_dependency 'thin', '~> 1.7'
 end
