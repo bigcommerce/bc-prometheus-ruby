@@ -31,6 +31,7 @@ module Bigcommerce
             @rack_app = ::Bigcommerce::Prometheus::Servers::Thin::RackApp.new(timeout: timeout, logger: logger)
             super(@host, @port, @rack_app)
             ::Thin::Logging.logger = @logger
+            @logger.info "[bigcommerce-prometheus] Prometheus server started on #{@host}:#{@port}"
             self.threadpool_size = (thread_pool_size || ::Bigcommerce::Prometheus.server_thread_pool_size).to_i
           end
 
