@@ -35,7 +35,7 @@ module Bigcommerce
         @prefix = (prefix || ::PrometheusExporter::DEFAULT_PREFIX).to_s
         @process_name = ::Bigcommerce::Prometheus.process_name
         @logger = logger || ::Bigcommerce::Prometheus.logger
-        @server = ::Bigcommerce::Prometheus::Servers::Thin::Server.new(
+        @server = ::Bigcommerce::Prometheus::Servers::Puma::Server.new(
           port: @port,
           timeout: @timeout,
           logger: @logger,

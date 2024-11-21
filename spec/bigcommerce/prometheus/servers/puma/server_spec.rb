@@ -1,7 +1,7 @@
 require 'spec_helper'
 
-describe Bigcommerce::Prometheus::Servers::Thin::Server do
-  let(:server) { described_class.new }
+describe Bigcommerce::Prometheus::Servers::Puma::Server do
+  let(:server) { described_class.new(port: 9800+rand(100)) }
 
   before do
     Bigcommerce::Prometheus.reset
@@ -9,8 +9,8 @@ describe Bigcommerce::Prometheus::Servers::Thin::Server do
 
   context 'when the thread pool size is not configured' do
     it 'falls back to the default configuration' do
-      expect(server.threadpool_size).to eq ::Bigcommerce::Prometheus.server_thread_pool_size
-      expect(server.threadpool_size).to eq 3
+      expect(server.max_threads).to eq ::Bigcommerce::Prometheus.server_thread_pool_size
+      expect(server.max_threads).to eq 3
     end
   end
 
@@ -24,7 +24,7 @@ describe Bigcommerce::Prometheus::Servers::Thin::Server do
     end
 
     it 'allows you to set the thread pool size through the configuration block' do
-      expect(server.threadpool_size).to eq server_thread_pool_size
+      expect(server.max_threads).to eq server_thread_pool_size
     end
   end
 end

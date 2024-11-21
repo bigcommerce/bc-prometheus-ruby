@@ -18,9 +18,9 @@
 module Bigcommerce
   module Prometheus
     module Servers
-      module Thin
+      module Puma
         ##
-        # Handles metrics requests as a Rack App on the Thin server
+        # Handles metrics requests as a Rack App on the Puma server
         #
         class RackApp
           ##
@@ -29,7 +29,7 @@ module Bigcommerce
             @timeout = timeout || ::Bigcommerce::Prometheus.server_timeout
             @collector = collector || ::PrometheusExporter::Server::Collector.new
             @logger = logger || ::Bigcommerce::Prometheus.logger
-            @server_metrics = ::Bigcommerce::Prometheus::Servers::Thin::ServerMetrics.new(logger: @logger)
+            @server_metrics = ::Bigcommerce::Prometheus::Servers::Puma::ServerMetrics.new(logger: @logger)
           end
 
           def call(env)
@@ -39,7 +39,7 @@ module Bigcommerce
             handle(controller: controller, request: request, response: response)
           rescue StandardError => e
             @logger.error "Error: #{e.message}"
-            handle(controller: ::Bigcommerce::Prometheus::Servers::Thin::Controllers::ErrorController, request: request, response: response)
+            handle(controller: ::Bigcommerce::Prometheus::Servers::Puma::Controllers::ErrorController, request: request, response: response)
           end
 
           ##
@@ -60,11 +60,11 @@ module Bigcommerce
           #
           def route(request)
             if request.fullpath == '/metrics' && request.request_method.to_s.downcase == 'get'
-              Bigcommerce::Prometheus::Servers::Thin::Controllers::MetricsController
+              Bigcommerce::Prometheus::Servers::Puma::Controllers::MetricsController
             elsif request.fullpath == '/send-metrics' && request.request_method.to_s.downcase == 'post'
-              Bigcommerce::Prometheus::Servers::Thin::Controllers::SendMetricsController
+              Bigcommerce::Prometheus::Servers::Puma::Controllers::SendMetricsController
             else
-              Bigcommerce::Prometheus::Servers::Thin::Controllers::NotFoundController
+              Bigcommerce::Prometheus::Servers::Puma::Controllers::NotFoundController
             end
           end
 

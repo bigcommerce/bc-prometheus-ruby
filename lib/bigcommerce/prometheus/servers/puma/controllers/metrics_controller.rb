@@ -22,7 +22,7 @@ require 'stringio'
 module Bigcommerce
   module Prometheus
     module Servers
-      module Thin
+      module Puma
         module Controllers
           ##
           # GET /metrics
