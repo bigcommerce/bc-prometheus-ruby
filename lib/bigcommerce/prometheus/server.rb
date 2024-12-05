@@ -52,12 +52,10 @@ module Bigcommerce
       def start
         @logger.info "[bigcommerce-prometheus][#{@process_name}] Starting prometheus exporter on port #{@host}:#{@port}"
 
-        @run_thread = ::Thread.start do
-          @server.start
-        end
+        @run_thread = @server.run
         @running = true
 
-        @logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter started on #{@host}:#{@port} with #{@server.threadpool_size} threads"
+        @logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter started on #{@host}:#{@port} with #{@server.pool_capacity} threads"
 
         @server
       rescue ::StandardError => e
@@ -81,7 +79,7 @@ module Bigcommerce
       # Stop the server
       #
       def stop
-        @server.stop!
+        @server.stop
         @run_thread.kill
         @running = false
         $stdout.puts "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter cleanly shut down"

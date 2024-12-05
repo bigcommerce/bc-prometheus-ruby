@@ -30,7 +30,7 @@ module Bigcommerce
             @logger = logger || ::Bigcommerce::Prometheus.logger
             @rack_app = ::Bigcommerce::Prometheus::Servers::Puma::RackApp.new(timeout: timeout, logger: logger)
             thread_pool_size = (thread_pool_size || ::Bigcommerce::Prometheus.server_thread_pool_size).to_i
-            super(@app, nil, max_threads: thread_pool_size)
+            super(@rack_app, nil, max_threads: thread_pool_size)
             add_tcp_listener(@host, @port)
             @logger.info "[bigcommerce-prometheus] Prometheus server started on #{@host}:#{@port}"
           end
