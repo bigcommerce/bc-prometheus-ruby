@@ -55,7 +55,7 @@ module Bigcommerce
         @run_thread = @server.run
         @running = true
 
-        @logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter started on #{@host}:#{@port} with #{@server.pool_capacity} threads"
+        @logger.info "[bigcommerce-prometheus][#{@process_name}] Prometheus exporter started on #{@host}:#{@port} with #{@server.max_threads} threads"
 
         @server
       rescue ::StandardError => e
