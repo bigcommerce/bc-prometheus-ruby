@@ -3,6 +3,9 @@ Changelog for the bc-prometheus-ruby gem.
 ### Pending Release
 
 - Add CI suite for Ruby 3.3
+- Update README for starting prometheus with Puma
+- Add logging with prometheus server starts
+- Migrate from thin to puma as the web server
 
 ## 0.6.0
 
