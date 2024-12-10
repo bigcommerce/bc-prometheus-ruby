@@ -18,42 +18,15 @@
 module Bigcommerce
   module Prometheus
     module Servers
-      module Thin
+      module Puma
         module Controllers
           ##
-          # Base thin controller for prometheus metrics
+          # Handle 500s
           #
-          class BaseController
-            ##
-            # @param [Rack::Request] request
-            # @param [Rack::Response] response
-            # @param [Bigcommerce::Prometheus::Servers::Thin::ServerMetrics]
-            # @param [PrometheusExporter::Server::Collector] collector
-            # @param [Logger] logger
-            #
-            def initialize(request:, response:, server_metrics:, collector:, logger:)
-              @request = request
-              @response = response
-              @collector = collector
-              @server_metrics = server_metrics
-              @logger = logger
-            end
-
-            def handle
-              call
-              @response.finish
-            end
-
-            ##
-            # @param [String] key
-            # @param [String] value
-            #
-            def set_header(key, value)
-              if @response.respond_to?(:add_header) # rack 2.0+
-                @response.add_header(key.to_s, value.to_s)
-              else
-                @response[key.to_s] = value.to_s
-              end
+          class ErrorController < BaseController
+            def call
+              @response.body << ''
+              @response.status = 500
             end
           end
         end

@@ -18,7 +18,7 @@
 module Bigcommerce
   module Prometheus
     module Servers
-      module Thin
+      module Puma
         module Controllers
           ##
           # Handle invalid requests to server

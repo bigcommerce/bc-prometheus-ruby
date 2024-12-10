@@ -18,21 +18,21 @@
 module Bigcommerce
   module Prometheus
     module Servers
-      module Thin
+      module Puma
         ##
-        # Thin adapter for server
+        # Puma adapter for server
         #
-        class Server < ::Thin::Server
+        class Server < ::Puma::Server
           def initialize(port: nil, host: nil, timeout: nil, logger: nil, thread_pool_size: nil)
             @port = port || ::Bigcommerce::Prometheus.server_port
             @host = host || ::Bigcommerce::Prometheus.server_host
             @timeout = timeout || ::Bigcommerce::Prometheus.server_timeout
             @logger = logger || ::Bigcommerce::Prometheus.logger
-            @rack_app = ::Bigcommerce::Prometheus::Servers::Thin::RackApp.new(timeout: timeout, logger: logger)
-            super(@host, @port, @rack_app)
-            ::Thin::Logging.logger = @logger
+            @rack_app = ::Bigcommerce::Prometheus::Servers::Puma::RackApp.new(timeout: timeout, logger: logger)
+            thread_pool_size = (thread_pool_size || ::Bigcommerce::Prometheus.server_thread_pool_size).to_i
+            super(@rack_app, nil, max_threads: thread_pool_size)
+            add_tcp_listener(@host, @port)
             @logger.info "[bigcommerce-prometheus] Prometheus server started on #{@host}:#{@port}"
-            self.threadpool_size = (thread_pool_size || ::Bigcommerce::Prometheus.server_thread_pool_size).to_i
           end
 
           ##
