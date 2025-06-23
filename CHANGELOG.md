@@ -2,6 +2,9 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+- Add support for Ruby 3.4
+- Drop support for Ruby 3.0, 3.1
+
 ## 0.7.0
 
 - Add CI suite for Ruby 3.3

@@ -31,7 +31,7 @@ Gem::Specification.new do |spec|
 
   spec.files         = Dir['README.md', 'CHANGELOG.md', 'CODE_OF_CONDUCT.md', 'lib/**/*', 'bc-prometheus-ruby.gemspec']
   spec.require_paths = ['lib']
-  spec.required_ruby_version = '>= 3.0'
+  spec.required_ruby_version = '>= 3.2'
 
   spec.add_runtime_dependency 'bigcommerce-multitrap', '~> 0.1'
   spec.add_runtime_dependency 'prometheus_exporter', '~> 0.7'
