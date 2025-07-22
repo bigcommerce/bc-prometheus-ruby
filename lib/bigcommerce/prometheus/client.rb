@@ -70,6 +70,14 @@ module Bigcommerce
       end
 
       ##
+      # @param [String] str
+      def send(str)
+        return unless Bigcommerce::Prometheus.enabled
+
+        super
+      end
+
+      ##
       # Process the current queue and flush to the collector
       #
       def process_queue
