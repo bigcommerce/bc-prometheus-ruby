@@ -33,4 +33,26 @@ describe Bigcommerce::Prometheus::Client do
       expect(ref1).to eq ref2
     end
   end
+
+  describe '#send' do
+    context 'when prometheus is enabled' do
+      before do
+        allow(Bigcommerce::Prometheus).to receive(:enabled).and_return(true)
+      end
+
+      it 'sends a message to the Prometheus server' do
+        expect { client.send('test_message') }.to change(client.instance_variable_get(:@queue), :size).by 1
+      end
+    end
+
+    context 'when prometheus is disabled' do
+      before do
+        allow(Bigcommerce::Prometheus).to receive(:enabled).and_return(false)
+      end
+
+      it 'sends a message to the Prometheus server' do
+        expect { client.send('test_message') }.not_to change(client.instance_variable_get(:@queue), :size)
+      end
+    end
+  end
 end
