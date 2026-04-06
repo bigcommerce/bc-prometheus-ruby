@@ -38,6 +38,8 @@ module Bigcommerce
               else
                 @response.write(collected_metrics)
               end
+
+              set_header('Content-Type', 'text/plain; charset=utf-8')
               @response
             end
 
