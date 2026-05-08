@@ -46,10 +46,12 @@ module Bigcommerce
 
           server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
           server.add_type_collector(PrometheusExporter::Server::HutchCollector.new)
+          ::Bigcommerce::Prometheus::Integrations::ActiveRecordSql.register_type_collector(server, process_name: @process_name)
           @type_collectors.each do |tc|
             server.add_type_collector(tc)
           end
           server.start
+          ::Bigcommerce::Prometheus::Integrations::ActiveRecordSql.start_safe(client: Bigcommerce::Prometheus.client, process_name: @process_name)
           setup_middleware
         rescue StandardError => e
           logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to start hutch instrumentation - #{e.message} - #{e.backtrace[0..4].join("\n")}"

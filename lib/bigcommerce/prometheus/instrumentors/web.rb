@@ -67,6 +67,7 @@ module Bigcommerce
             server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
             server.add_type_collector(PrometheusExporter::Server::WebCollector.new)
             server.add_type_collector(PrometheusExporter::Server::PumaCollector.new)
+            ::Bigcommerce::Prometheus::Integrations::ActiveRecordSql.register_type_collector(server, process_name: @process_name)
             @type_collectors.each do |tc|
               server.add_type_collector(tc)
             end
@@ -78,6 +79,7 @@ module Bigcommerce
           @app.config.after_fork_callbacks = [] unless @app.config.after_fork_callbacks
           @app.config.after_fork_callbacks << lambda do
             ::Bigcommerce::Prometheus::Integrations::Puma.start(client: Bigcommerce::Prometheus.client)
+            ::Bigcommerce::Prometheus::Integrations::ActiveRecordSql.start_safe(client: Bigcommerce::Prometheus.client, process_name: @process_name)
             @collectors.each(&:start)
           rescue StandardError => e
             logger.error "[bigcommerce-prometheus][#{@process_name}] Failed to start web prometheus middleware after fork: #{e.message}"

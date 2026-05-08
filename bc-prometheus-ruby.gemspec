@@ -38,4 +38,6 @@ Gem::Specification.new do |spec|
   spec.add_runtime_dependency 'puma', '> 5'
   spec.add_runtime_dependency 'rack', '>= 3.0'
   spec.add_runtime_dependency 'rake', '>= 10.0'
+
+  spec.add_development_dependency 'activesupport', '>= 6.0'
 end

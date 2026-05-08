@@ -35,6 +35,8 @@ require_relative 'prometheus/collectors/base'
 require_relative 'prometheus/collectors/resque'
 require_relative 'prometheus/type_collectors/base'
 require_relative 'prometheus/type_collectors/resque'
+require_relative 'prometheus/integrations/active_record'
+require_relative 'prometheus/type_collectors/active_record'
 
 require_relative 'prometheus/instrumentors/web'
 require_relative 'prometheus/instrumentors/hutch'
