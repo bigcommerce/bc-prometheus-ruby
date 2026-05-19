@@ -51,7 +51,7 @@ module Bigcommerce
         # @return [Boolean]
         #
         def self.active_record_enabled?
-          defined?(ActiveRecord) && ::ActiveRecord::Base.connection_pool.respond_to?(:stat)
+          defined?(::ActiveRecord) && ::ActiveRecord::Base.connection_pool.respond_to?(:stat)
         end
 
         ##
