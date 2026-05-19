@@ -2,6 +2,12 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+## 0.8.1
+
+- Prometheus client respects the enabled setting
+- Upgrade prometheus_exporter
+- Expose SQL metrics for different dashboards
+
 ## 0.8.0
 
 - Add support for Ruby 3.4
