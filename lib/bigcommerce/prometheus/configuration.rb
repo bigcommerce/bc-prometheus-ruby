@@ -55,7 +55,7 @@ module Bigcommerce
 
         # Additional configuration
         railtie_disabled: ENV.fetch('PROMETHEUS_DISABLE_RAILTIE', 0).to_i.positive?,
-        active_record_enabled: ENV.fetch('PROMETHEUS_ACTIVE_RECORD_ENABLED', 0).to_i.positive?
+        active_record_enabled: ENV.fetch('PROMETHEUS_ACTIVE_RECORD_ENABLED', 1).to_i.positive?
       }.freeze
 
       attr_accessor *VALID_CONFIG_KEYS.keys

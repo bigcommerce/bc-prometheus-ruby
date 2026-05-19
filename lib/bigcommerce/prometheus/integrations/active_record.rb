@@ -30,8 +30,18 @@ module Bigcommerce
         # so calling .start more than once (e.g. from both the gem's instrumentor and a
         # consuming app's initializer) does not register duplicate subscribers and
         # double-count every SQL query.
+        #
+        # Noop when ActiveRecord is not loaded so non-Rails consumers (or any process that
+        # never loads ActiveRecord) can call this safely.
         def self.start(client: nil)
+          return unless active_record_loaded?
+
           @start ||= new(client: client || ::Bigcommerce::Prometheus.client).tap(&:subscribe!)
+        end
+
+        # @return [Boolean] whether ActiveRecord is loaded in the current process.
+        def self.active_record_loaded?
+          defined?(::ActiveRecord) ? true : false
         end
 
         # Wrapper for instrumentor wiring: registers the AR SQL type collector on the given server,

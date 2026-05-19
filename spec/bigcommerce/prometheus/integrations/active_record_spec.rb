@@ -13,7 +13,10 @@ describe Bigcommerce::Prometheus::Integrations::ActiveRecordSql do
   end
 
   describe '.start' do
-    before { described_class.instance_variable_set(:@start, nil) }
+    before do
+      described_class.instance_variable_set(:@start, nil)
+      allow(described_class).to receive(:active_record_loaded?).and_return(true)
+    end
     after { described_class.instance_variable_set(:@start, nil) }
 
     it 'registers a listener on sql.active_record' do
@@ -26,6 +29,12 @@ describe Bigcommerce::Prometheus::Integrations::ActiveRecordSql do
       described_class.start(client: client)
       described_class.start(client: client)
       expect(ActiveSupport::Notifications).to have_received(:subscribe).with('sql.active_record').once
+    end
+
+    it 'is a noop when ActiveRecord is not loaded' do
+      allow(described_class).to receive(:active_record_loaded?).and_return(false)
+      expect(ActiveSupport::Notifications).not_to receive(:subscribe)
+      described_class.start(client: client)
     end
   end
 
