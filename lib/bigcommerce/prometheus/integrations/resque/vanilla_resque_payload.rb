@@ -18,25 +18,27 @@
 module Bigcommerce
   module Prometheus
     module Integrations
-      ##
-      # Plugin for resque
-      #
       class Resque
         ##
-        # Start the resque integration
+        # Payload fields for a vanilla Resque job.
+        # The top-level 'class' field is the real job class and the args are raw positional values.
+        # Vanilla payloads carry no enqueue timestamps, so there is never a queue-latency anchor.
+        # As such, queue_latency no-ops for these jobs by construction.
+        # perform_duration is unaffected.
         #
-        def self.start(client: nil)
-          ::PrometheusExporter::Instrumentation::Process.start(
-            client: client || ::Bigcommerce::Prometheus.client,
-            type: ::Bigcommerce::Prometheus.resque_process_label
-          )
-          ::Bigcommerce::Prometheus::Collectors::Resque.start(
-            client: client || ::Bigcommerce::Prometheus.client,
-            frequency: ::Bigcommerce::Prometheus.resque_collection_frequency
-          )
-          ::Bigcommerce::Prometheus::Integrations::Resque::JobMetrics.start(
-            client: client || ::Bigcommerce::Prometheus.client
-          )
+        class VanillaResquePayload
+          # @return [String] the top-level Resque payload class, or 'unknown' for malformed payloads
+          attr_reader :job_class
+
+          # @param [Hash] payload the raw Resque payload which is normalized to a Hash by JobPayload.for
+          def initialize(payload)
+            @job_class = payload['class'] || 'unknown'
+          end
+
+          # @return [nil] vanilla Resque payloads have no enqueue timestamps
+          def anchor_time
+            nil
+          end
         end
       end
     end

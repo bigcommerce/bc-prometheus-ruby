@@ -46,6 +46,7 @@ module Bigcommerce
 
           server.add_type_collector(PrometheusExporter::Server::ActiveRecordCollector.new)
           server.add_type_collector(Bigcommerce::Prometheus::TypeCollectors::Resque.new)
+          server.add_type_collector(Bigcommerce::Prometheus::TypeCollectors::ResqueJob.new)
           @type_collectors.each do |tc|
             server.add_type_collector(tc)
           end
