@@ -19,12 +19,14 @@ module Bigcommerce
   module Prometheus
     module TypeCollectors
       ##
-      # Collect resque data from collectors and parse them into metrics
+      # Aggregates the periodic worker/queue state pushed from
+      # `Bigcommerce::Prometheus::Collectors::Resque#collect`. Per-job
+      # histograms (`queue_latency`, `perform_duration`) live in
+      # `TypeCollectors::ResqueJob` so the upstream router can dispatch each
+      # envelope type to its own collector.
       #
       class Resque < Bigcommerce::Prometheus::TypeCollectors::Base
         ##
-        # Initialize the collector
-        #
         # @return [Hash]
         #
         def build_metrics
@@ -38,9 +40,6 @@ module Bigcommerce
           }
         end
 
-        ##
-        # Collect resque metrics from input data
-        #
         def collect_metrics(data:, labels: {})
           metric(:workers_total).observe(data['workers_total'], labels)
           metric(:jobs_failed_total).observe(data['jobs_failed_total'], labels)

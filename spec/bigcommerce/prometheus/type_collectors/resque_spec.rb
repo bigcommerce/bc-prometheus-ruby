@@ -58,22 +58,26 @@ describe Bigcommerce::Prometheus::TypeCollectors::Resque do
         name: 'queue_sizes',
         class: PrometheusExporter::Metric::Gauge,
         help: 'Size of each queue'
-      },
-
+      }
     }.each do |hash_key, config|
-      it "builds the #{hash_key} with stat key of #{config[:key]}" do
+      it "builds the #{hash_key} with the expected class and name" do
         metric = subject[hash_key]
         expect(metric).to be_a config[:class]
         expect(metric.name).to eq config[:name]
-        expect(metric.help).to eq config[:help]
+        expect(metric.help).to eq(config[:help]) if config[:help]
       end
     end
   end
 
-  describe '#collect_metrics' do
-    subject { type_collector.collect_metrics(data: data, labels: labels) }
+  # Exercise the public #collect entry point (defined on
+  # TypeCollectors::Base) so the spec catches any label-handling bugs in the
+  # Base → subclass dispatch — e.g. custom_labels getting merged twice.
+  describe '#collect' do
+    subject { type_collector.collect(data) }
 
-    let(:labels) { { environment: 'development' } }
+    let(:type_collector) { described_class.new(default_labels: default_labels) }
+    let(:default_labels) { { environment: 'development' } }
+
     let(:data) do
       {
         'workers_total' => 10,
@@ -92,15 +96,15 @@ describe Bigcommerce::Prometheus::TypeCollectors::Resque do
     it 'properly logs metrics for all passed values' do
       metrics = type_collector.instance_variable_get(:@metrics)
 
-      expect(metrics[:workers_total]).to receive(:observe).with(data['workers_total'], labels)
-      expect(metrics[:jobs_failed_total]).to receive(:observe).with(data['jobs_failed_total'], labels)
-      expect(metrics[:jobs_pending_total]).to receive(:observe).with(data['jobs_pending_total'], labels)
-      expect(metrics[:jobs_processed_total]).to receive(:observe).with(data['jobs_processed_total'], labels)
-      expect(metrics[:queues_total]).to receive(:observe).with(data['queues_total'], labels)
+      expect(metrics[:workers_total]).to receive(:observe).with(data['workers_total'], default_labels)
+      expect(metrics[:jobs_failed_total]).to receive(:observe).with(data['jobs_failed_total'], default_labels)
+      expect(metrics[:jobs_pending_total]).to receive(:observe).with(data['jobs_pending_total'], default_labels)
+      expect(metrics[:jobs_processed_total]).to receive(:observe).with(data['jobs_processed_total'], default_labels)
+      expect(metrics[:queues_total]).to receive(:observe).with(data['queues_total'], default_labels)
 
-      expect(metrics[:queue_sizes]).to receive(:observe).ordered.with(data['queues']['low'], labels.merge(queue: 'low'))
-      expect(metrics[:queue_sizes]).to receive(:observe).ordered.with(data['queues']['medium'], labels.merge(queue: 'medium'))
-      expect(metrics[:queue_sizes]).to receive(:observe).ordered.with(data['queues']['high'], labels.merge(queue: 'high'))
+      expect(metrics[:queue_sizes]).to receive(:observe).ordered.with(data['queues']['low'], default_labels.merge(queue: 'low'))
+      expect(metrics[:queue_sizes]).to receive(:observe).ordered.with(data['queues']['medium'], default_labels.merge(queue: 'medium'))
+      expect(metrics[:queue_sizes]).to receive(:observe).ordered.with(data['queues']['high'], default_labels.merge(queue: 'high'))
 
       subject
     end

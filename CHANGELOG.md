@@ -2,6 +2,8 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+- Add opt-in per-Resque-job histograms `resque_job_queue_latency_seconds` and `resque_job_perform_duration_seconds`, labelled by `job_class`. Recorded from the parent worker process (via `Resque.before_fork` and a `Module#prepend` around `Resque::Worker#perform_with_fork`), so no synchronous flush is needed in the forked child. Gated by `PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED` (default off).
+
 ## 0.8.1
 
 - Prometheus client respects the enabled setting
