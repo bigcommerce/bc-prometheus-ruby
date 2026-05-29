@@ -35,6 +35,7 @@ require_relative 'prometheus/collectors/base'
 require_relative 'prometheus/collectors/resque'
 require_relative 'prometheus/type_collectors/base'
 require_relative 'prometheus/type_collectors/resque'
+require_relative 'prometheus/type_collectors/resque_job'
 require_relative 'prometheus/integrations/active_record'
 require_relative 'prometheus/type_collectors/active_record'
 
@@ -44,6 +45,10 @@ require_relative 'prometheus/instrumentors/resque'
 require_relative 'prometheus/integrations/railtie' if defined?(Rails)
 require_relative 'prometheus/integrations/puma'
 require_relative 'prometheus/integrations/resque'
+require_relative 'prometheus/integrations/resque/active_job_payload'
+require_relative 'prometheus/integrations/resque/vanilla_resque_payload'
+require_relative 'prometheus/integrations/resque/job_payload'
+require_relative 'prometheus/integrations/resque/job_metrics'
 
 require_relative 'prometheus/servers/puma/server'
 require_relative 'prometheus/servers/puma/rack_app'

@@ -15,30 +15,28 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-module Bigcommerce
-  module Prometheus
-    module Integrations
-      ##
-      # Plugin for resque
-      #
-      class Resque
-        ##
-        # Start the resque integration
-        #
-        def self.start(client: nil)
-          ::PrometheusExporter::Instrumentation::Process.start(
-            client: client || ::Bigcommerce::Prometheus.client,
-            type: ::Bigcommerce::Prometheus.resque_process_label
-          )
-          ::Bigcommerce::Prometheus::Collectors::Resque.start(
-            client: client || ::Bigcommerce::Prometheus.client,
-            frequency: ::Bigcommerce::Prometheus.resque_collection_frequency
-          )
-          ::Bigcommerce::Prometheus::Integrations::Resque::JobMetrics.start(
-            client: client || ::Bigcommerce::Prometheus.client
-          )
-        end
-      end
+require 'spec_helper'
+
+describe Bigcommerce::Prometheus::Integrations::Resque::VanillaResquePayload do
+  describe '#job_class' do
+    it 'returns the top-level Resque payload class' do
+      payload = described_class.new('class' => 'BigPay::EnablePpcpJob', 'args' => [12_345, 'some_string'])
+
+      expect(payload.job_class).to eq('BigPay::EnablePpcpJob')
+    end
+
+    it "returns 'unknown' when the class field is missing" do
+      expect(described_class.new('args' => []).job_class).to eq('unknown')
+    end
+
+    it "returns 'unknown' for an empty payload (factory-normalized nil or non-Hash)" do
+      expect(described_class.new({}).job_class).to eq('unknown')
+    end
+  end
+
+  describe '#anchor_time' do
+    it 'is always nil (vanilla payloads carry no enqueue timestamps)' do
+      expect(described_class.new('class' => 'BigPay::EnablePpcpJob').anchor_time).to be_nil
     end
   end
 end

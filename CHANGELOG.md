@@ -2,6 +2,8 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+- Add opt-in per-Resque-job histograms `resque_job_queue_latency_seconds` and `resque_job_perform_duration_seconds`, labelled by `job_class`.
+
 ## 0.8.2
 
 - Add `version=0.0.4` to `Content-Type` header for Prometheus exposition format 0.0.4 compliance
