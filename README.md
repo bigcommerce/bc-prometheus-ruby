@@ -43,6 +43,17 @@ require 'bigcommerce/prometheus'
 Bigcommerce::Prometheus::Instrumentors::Resque.new(app: Rails.application).start
 ```
 
+### Per-job metrics (opt-in)
+
+Set `PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED=1` on Resque worker pods to enable two additional histograms recorded from the parent worker process (no per-job synchronous flush):
+
+- `resque_job_queue_latency_seconds{job_class}` — time from `scheduled_at` (falling back to `enqueued_at`) until a worker picks the job up. Per attempt; retries-with-backoff anchor on `scheduled_at` so the intentional backoff doesn't show as latency.
+- `resque_job_perform_duration_seconds{job_class}` — total Resque child lifetime (fork → `Process.waitpid` return). Includes fork overhead, Redis reconnect, after_fork hooks, perform, and exit.
+
+These are off by default because they emit one histogram observation per job per worker pod, which adds cardinality. Opt in per service.
+
+ActiveJob-wrapped jobs are unwrapped automatically — the `job_class` label is the user's job class name, not `ActiveJob::QueueAdapters::ResqueAdapter::JobWrapper`.
+
 ## Configuration
 
 After requiring the main file, you can further configure with:
@@ -58,6 +69,7 @@ After requiring the main file, you can further configure with:
 | server_thread_pool_size | The number of threads used for the exporter server | `3` | `ENV['PROMETHEUS_SERVER_THREAD_POOL_SIZE']` |
 | process_name | What the current process name is (used in logging) | `"unknown"` | `ENV['PROCESS']` |
 | railtie_disabled | Opt out flag for Railtie; use `Bigcommerce::Prometheus::Instrumentors::Web.new(app: Rails.application).start` in your app's code to start it up yourself  | `0` | `ENV['PROMETHEUS_DISABLE_RAILTIE']` |
+| resque_per_job_metrics_enabled | Enable per-job queue-latency and perform-duration histograms (parent-side, no synchronous flush) | `0` | `ENV['PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED']` |
 
 ## Custom Collectors
 

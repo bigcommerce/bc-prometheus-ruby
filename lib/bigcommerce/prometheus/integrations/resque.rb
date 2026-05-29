@@ -34,6 +34,9 @@ module Bigcommerce
             client: client || ::Bigcommerce::Prometheus.client,
             frequency: ::Bigcommerce::Prometheus.resque_collection_frequency
           )
+          ::Bigcommerce::Prometheus::Integrations::Resque::JobMetrics.start(
+            client: client || ::Bigcommerce::Prometheus.client
+          )
         end
       end
     end
