@@ -55,6 +55,8 @@ These are off by default because they emit one histogram observation per job per
 `resque_job_queue_latency_seconds` is supported for jobs enqueued via ActiveJob (`.perform_later`) — the enqueue timestamps come from ActiveJob's serialized payload, and the `job_class` label is the user's job class name, not `ActiveJob::QueueAdapters::ResqueAdapter::JobWrapper`. 
 Vanilla Resque jobs (`Resque.enqueue`) carry no enqueue timestamps, so `queue_latency` silently no-ops for them; `perform_duration` works for every job regardless.
 
+Requires resque >= 1.27 workers running in the default fork-per-job mode — the hooks instrument `Resque::Worker#perform_with_fork`. Non-forking workers (`FORK_PER_JOB=false`, or platforms without `fork`) are not instrumented; a warning is logged at worker boot when per-job metrics are enabled but cannot record.
+
 ## Configuration
 
 After requiring the main file, you can further configure with:

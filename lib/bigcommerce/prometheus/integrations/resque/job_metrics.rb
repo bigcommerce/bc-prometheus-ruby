@@ -70,6 +70,7 @@ module Bigcommerce
               return unless ::Bigcommerce::Prometheus.resque_per_job_metrics_enabled
 
               @client = client
+              log_install_state
               install_hooks
             end
 
@@ -131,6 +132,38 @@ module Bigcommerce
 
               ::Resque::Worker.prepend(WorkerInstrumentation)
               @hooks_installed = true
+            end
+
+            ##
+            # Surface at boot whether the worker can actually be observed — per-job metrics are
+            # opt-in and must not be silently absent. Must run before install_hooks: the prepend
+            # itself defines perform_with_fork, which would satisfy the presence check.
+            #
+            def log_install_state
+              unless worker_defines_perform_with_fork?
+                ::Bigcommerce::Prometheus.logger&.warn(
+                  '[bigcommerce-prometheus] resque_job metrics are enabled but Resque::Worker#perform_with_fork ' \
+                  'is not defined (requires resque >= 1.27); per-job metrics will not be recorded'
+                )
+                return
+              end
+
+              if ENV['FORK_PER_JOB'] == 'false' || !Kernel.respond_to?(:fork)
+                ::Bigcommerce::Prometheus.logger&.warn(
+                  '[bigcommerce-prometheus] resque_job metrics are enabled but the worker is not forking per job; ' \
+                  'only the forking path is instrumented, so per-job metrics will not be recorded'
+                )
+                return
+              end
+
+              ::Bigcommerce::Prometheus.logger&.info(
+                '[bigcommerce-prometheus] resque_job per-job metrics enabled; instrumenting Resque::Worker (fork-per-job mode)'
+              )
+            end
+
+            def worker_defines_perform_with_fork?
+              ::Resque::Worker.method_defined?(:perform_with_fork) ||
+                ::Resque::Worker.private_method_defined?(:perform_with_fork)
             end
           end
 

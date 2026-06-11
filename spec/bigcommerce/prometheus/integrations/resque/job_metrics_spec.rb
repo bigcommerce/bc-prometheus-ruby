@@ -201,7 +201,13 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
   end
 
   describe '.start' do
-    let(:worker_class) { Class.new }
+    let(:worker_class) do
+      Class.new do
+        private
+
+        def perform_with_fork(_job, &_block); end
+      end
+    end
 
     before do
       stub_const('Resque::Worker', worker_class)
@@ -225,6 +231,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
     context 'when the feature is enabled' do
       before do
         allow(Bigcommerce::Prometheus).to receive(:resque_per_job_metrics_enabled).and_return(true)
+        allow(Bigcommerce::Prometheus.logger).to receive(:info)
       end
 
       it 'prepends WorkerInstrumentation onto Resque::Worker' do
@@ -240,6 +247,42 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
         described_class.start(client: client)
 
         expect(worker_class).to have_received(:prepend).once
+      end
+
+      it 'logs that the worker is being instrumented' do
+        described_class.start(client: client)
+
+        expect(Bigcommerce::Prometheus.logger).to have_received(:info).with(/instrumenting Resque::Worker/)
+      end
+    end
+
+    context 'when the feature is enabled but the worker does not define perform_with_fork' do
+      let(:worker_class) { Class.new }
+
+      before do
+        allow(Bigcommerce::Prometheus).to receive(:resque_per_job_metrics_enabled).and_return(true)
+        allow(Bigcommerce::Prometheus.logger).to receive(:warn)
+      end
+
+      it 'warns that per-job metrics will not be recorded' do
+        described_class.start(client: client)
+
+        expect(Bigcommerce::Prometheus.logger).to have_received(:warn).with(/perform_with_fork is not defined/)
+      end
+    end
+
+    context 'when the feature is enabled but FORK_PER_JOB is disabled' do
+      before do
+        allow(Bigcommerce::Prometheus).to receive(:resque_per_job_metrics_enabled).and_return(true)
+        allow(Bigcommerce::Prometheus.logger).to receive(:warn)
+        allow(ENV).to receive(:[]).and_call_original
+        allow(ENV).to receive(:[]).with('FORK_PER_JOB').and_return('false')
+      end
+
+      it 'warns that only the forking path is instrumented' do
+        described_class.start(client: client)
+
+        expect(Bigcommerce::Prometheus.logger).to have_received(:warn).with(/not forking per job/)
       end
     end
   end
