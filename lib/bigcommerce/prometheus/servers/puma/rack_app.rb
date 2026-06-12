@@ -77,7 +77,8 @@ module Bigcommerce
               response: response,
               server_metrics: @server_metrics,
               collector: @collector,
-              logger: @logger
+              logger: @logger,
+              timeout: @timeout
             )
             con.handle
           end

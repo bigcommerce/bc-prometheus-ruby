@@ -31,12 +31,13 @@ module Bigcommerce
             # @param [PrometheusExporter::Server::Collector] collector
             # @param [Logger] logger
             #
-            def initialize(request:, response:, server_metrics:, collector:, logger:)
+            def initialize(request:, response:, server_metrics:, collector:, logger:, timeout: nil)
               @request = request
               @response = response
               @collector = collector
               @server_metrics = server_metrics
               @logger = logger
+              @timeout = timeout
             end
 
             def handle

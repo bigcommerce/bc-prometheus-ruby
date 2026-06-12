@@ -46,5 +46,26 @@ describe Bigcommerce::Prometheus::Servers::Puma::RackApp do
         expect(headers['Content-Type']).to eq('text/plain; charset=utf-8')
       end
     end
+
+    context 'when a timeout is configured on the app' do
+      let(:timeout) { 7 }
+      let(:app) { described_class.new(collector: collector, timeout: timeout, logger: logger) }
+
+      let(:env) do
+        {
+          'REQUEST_METHOD' => 'GET',
+          'PATH_INFO' => '/metrics',
+          'QUERY_STRING' => '',
+          'rack.input' => StringIO.new
+        }
+      end
+
+      it 'passes the timeout to the metrics controller' do
+        expect(Bigcommerce::Prometheus::Servers::Puma::Controllers::MetricsController).to receive(:new)
+          .with(hash_including(timeout: timeout))
+          .and_call_original
+        app.call(env)
+      end
+    end
   end
 end

@@ -64,6 +64,24 @@ collector_rss 60440
       end
     end
 
+    context 'when a timeout is configured' do
+      let(:controller) do
+        described_class.new(
+          request: request,
+          response: response,
+          server_metrics: server_metrics,
+          collector: collector,
+          logger: logger,
+          timeout: 5
+        )
+      end
+
+      it 'passes the timeout to Timeout.timeout' do
+        expect(Timeout).to receive(:timeout).with(5).and_call_original
+        controller.call
+      end
+    end
+
     context 'when the client accepts gzip encoding' do
       let(:env) do
         {
