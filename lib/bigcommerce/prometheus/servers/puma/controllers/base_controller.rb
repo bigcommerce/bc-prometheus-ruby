@@ -30,6 +30,7 @@ module Bigcommerce
             # @param [Bigcommerce::Prometheus::Servers::Puma::ServerMetrics]
             # @param [PrometheusExporter::Server::Collector] collector
             # @param [Logger] logger
+            # @param [Integer, nil] timeout scrape timeout in seconds; nil means no limit
             #
             def initialize(request:, response:, server_metrics:, collector:, logger:, timeout: nil)
               @request = request
