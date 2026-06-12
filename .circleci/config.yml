@@ -7,12 +7,6 @@ orbs:
 defaults: &defaults
   notify_failure: false
 
-ruby_3_2_defaults: &ruby_3_2_defaults
-  <<: *defaults
-  e:
-    name: ruby/ruby
-    ruby-version: '3.2'
-
 ruby_3_3_defaults: &ruby_3_3_defaults
   <<: *defaults
   e:
@@ -25,20 +19,14 @@ ruby_3_4_defaults: &ruby_3_4_defaults
     name: ruby/ruby
     ruby-version: '3.4'
 
+ruby_4_0_defaults: &ruby_4_0_defaults
+  <<: *defaults
+  e:
+    name: ruby/ruby
+    ruby-version: '4.0'
+
 workflows:
   version: 2
-  ruby_3_2:
-    jobs:
-      - ruby/bundle-audit:
-          <<: *ruby_3_2_defaults
-          name: ruby-3_2-bundle_audit
-      - ruby/rubocop:
-          <<: *ruby_3_2_defaults
-          name: ruby-3_2-rubocop
-      - ruby/rspec-unit:
-          <<: *ruby_3_2_defaults
-          name: ruby-3_2-rspec_unit
-          db: false
   ruby_3_3:
     jobs:
       - ruby/bundle-audit:
@@ -62,4 +50,16 @@ workflows:
       - ruby/rspec-unit:
           <<: *ruby_3_4_defaults
           name: ruby-3_4-rspec_unit
+          db: false
+  ruby_4_0:
+    jobs:
+      - ruby/bundle-audit:
+          <<: *ruby_4_0_defaults
+          name: ruby-4_0-bundle_audit
+      - ruby/rubocop:
+          <<: *ruby_4_0_defaults
+          name: ruby-4_0-rubocop
+      - ruby/rspec-unit:
+          <<: *ruby_4_0_defaults
+          name: ruby-4_0-rspec_unit
           db: false
