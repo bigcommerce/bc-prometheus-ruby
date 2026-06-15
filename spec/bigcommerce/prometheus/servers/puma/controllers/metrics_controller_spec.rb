@@ -63,5 +63,32 @@ collector_rss 60440
 '
       end
     end
+
+    context 'when the client accepts gzip encoding' do
+      let(:env) do
+        {
+          'REQUEST_METHOD' => 'GET',
+          'rack.input' => StringIO.new(''),
+          'HTTP_ACCEPT_ENCODING' => 'gzip, deflate'
+        }
+      end
+      let(:request) { Rack::Request.new(env) }
+
+      it 'only calls the metrics method once' do
+        call_count = 0
+        allow(controller).to receive(:metrics).and_wrap_original do |m, *args|
+          call_count += 1
+          m.call(*args)
+        end
+        controller.call
+        expect(call_count).to eq(1)
+      end
+
+      it 'returns gzip-encoded content' do
+        result = controller.call
+        content_encoding = result.headers['Content-Encoding']
+        expect(content_encoding).to eq('gzip')
+      end
+    end
   end
 end

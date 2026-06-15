@@ -34,7 +34,7 @@ module Bigcommerce
             def call
               collected_metrics = metrics
               if @request.accept_encoding.to_s.include?('gzip')
-                write_gzip(metrics)
+                write_gzip(collected_metrics)
               else
                 @response.write(collected_metrics)
               end
