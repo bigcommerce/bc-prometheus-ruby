@@ -104,5 +104,21 @@ describe Bigcommerce::Prometheus::TypeCollectors::Resque do
 
       subject
     end
+
+    context 'when queues key is absent from data' do
+      let(:data_without_queues) do
+        {
+          'workers_total' => 2,
+          'jobs_failed_total' => 0,
+          'jobs_pending_total' => 1,
+          'jobs_processed_total' => 500,
+          'queues_total' => 0
+        }
+      end
+
+      it 'does not raise' do
+        expect { type_collector.collect_metrics(data: data_without_queues, labels: {}) }.not_to raise_error
+      end
+    end
   end
 end

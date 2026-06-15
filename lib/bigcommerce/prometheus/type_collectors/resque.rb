@@ -48,7 +48,7 @@ module Bigcommerce
           metric(:jobs_processed_total).observe(data['jobs_processed_total'], labels)
           metric(:queues_total).observe(data['queues_total'], labels)
 
-          data['queues'].each do |name, size|
+          (data['queues'] || {}).each do |name, size|
             metric(:queue_sizes).observe(size, labels.merge(queue: name))
           end
         end
