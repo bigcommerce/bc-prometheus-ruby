@@ -34,7 +34,7 @@ module Bigcommerce
         puma_collection_frequency: ENV.fetch('PROMETHEUS_PUMA_COLLECTION_FREQUENCY', 30).to_i,
         puma_process_label: ENV.fetch('PROMETHEUS_PUMA_PROCESS_LABEL', 'web').to_s,
         resque_collection_frequency: ENV.fetch('PROMETHEUS_RESQUE_COLLECTION_FREQUENCY', 30).to_i,
-        resque_process_label: ENV.fetch('PROMETHEUS_REQUEST_PROCESS_LABEL', 'resque').to_s,
+        resque_process_label: ENV.fetch('PROMETHEUS_RESQUE_PROCESS_LABEL', 'resque').to_s,
 
         # Server configuration
         not_found_body: ENV.fetch('PROMETHEUS_SERVER_NOT_FOUND_BODY', 'Not Found! The Prometheus Ruby Exporter only listens on /metrics and /send-metrics').to_s,
