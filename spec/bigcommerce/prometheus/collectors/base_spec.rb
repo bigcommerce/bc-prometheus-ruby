@@ -60,4 +60,23 @@ describe Bigcommerce::Prometheus::Collectors::Base do
       subject
     end
   end
+
+  describe '.start — thread resilience' do
+    let(:error_client) { double(:client, send_json: true) }
+    let(:failing_collector_class) do
+      Class.new(Bigcommerce::Prometheus::Collectors::Base) do
+        def collect(metrics)
+          raise StandardError, 'Redis gone'
+        end
+      end
+    end
+
+    it 'keeps the thread alive after collect raises a StandardError' do
+      thread = failing_collector_class.start(client: error_client, frequency: 0)
+      sleep 0.1
+      expect(thread).to be_alive
+    ensure
+      failing_collector_class.stop
+    end
+  end
 end

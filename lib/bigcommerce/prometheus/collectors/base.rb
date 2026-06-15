@@ -72,6 +72,8 @@ module Bigcommerce
           metrics = {}
           metrics = collect(metrics)
           push(metrics)
+        rescue StandardError => e
+          @logger.error("[bigcommerce-prometheus] Collector error (#{self.class}), continuing: #{e.message}")
         ensure
           sleep @frequency
         end
