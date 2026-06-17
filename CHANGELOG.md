@@ -2,6 +2,10 @@ Changelog for the bc-prometheus-ruby gem.
 
 ### Pending Release
 
+## 0.8.2
+
+- Fix Prometheus 3.x Content-Type compliance: add `version=0.0.4` qualifier to the `text/plain` Content-Type header served by the Puma metrics controller (INFRA-25589)
+
 ## 0.8.1
 
 - Prometheus client respects the enabled setting
