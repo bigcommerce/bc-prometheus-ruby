@@ -4,7 +4,7 @@ Changelog for the bc-prometheus-ruby gem.
 
 ## 0.8.2
 
-- Add `version=0.0.4` to `Content-Type` header for Prometheus exposition format 0.0.4 compliance (INFRA-25589)
+- Add `version=0.0.4` to `Content-Type` header for Prometheus exposition format 0.0.4 compliance
 
 ## 0.8.1
 
