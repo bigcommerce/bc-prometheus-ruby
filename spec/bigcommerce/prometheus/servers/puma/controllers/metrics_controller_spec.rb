@@ -49,6 +49,10 @@ ruby_collector_metrics_total 19
 ruby_collector_sessions_total 19'
     end
 
+    it 'sets Prometheus text format 0.0.4 content type' do
+      expect(subject.headers['Content-Type']).to eq('text/plain; version=0.0.4; charset=utf-8')
+    end
+
     context 'when the metrics fail to parse' do
       let(:timeout_exception) { ::Timeout::Error }
       before do
