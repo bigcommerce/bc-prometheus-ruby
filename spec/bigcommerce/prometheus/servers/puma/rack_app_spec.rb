@@ -41,9 +41,9 @@ describe Bigcommerce::Prometheus::Servers::Puma::RackApp do
         }
       end
 
-      it 'returns content type of text/plain' do
+      it 'returns Prometheus text format 0.0.4 content type' do
         _status, headers, _body = subject
-        expect(headers['Content-Type']).to eq('text/plain; charset=utf-8')
+        expect(headers['Content-Type']).to eq('text/plain; version=0.0.4; charset=utf-8')
       end
     end
 
