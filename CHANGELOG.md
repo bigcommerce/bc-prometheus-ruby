@@ -1,6 +1,6 @@
 Changelog for the bc-prometheus-ruby gem.
 
-### Pending Release
+## 0.8.3
 
 - Add opt-in per-Resque-job histograms `resque_job_queue_latency_seconds` and `resque_job_perform_duration_seconds`, labelled by `job_class`.
 
