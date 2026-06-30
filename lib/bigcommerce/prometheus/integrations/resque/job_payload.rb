@@ -53,7 +53,10 @@ module Bigcommerce
 
               inner = activejob_inner(payload)
               inner ? ActiveJobPayload.new(inner) : VanillaResquePayload.new(payload)
-            rescue StandardError
+            rescue StandardError => e
+              ::Bigcommerce::Prometheus.logger&.warn(
+                "[bigcommerce-prometheus] resque_job payload parse failed: #{e.message}"
+              )
               VanillaResquePayload.new({})
             end
 

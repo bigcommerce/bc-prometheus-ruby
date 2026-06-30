@@ -71,6 +71,12 @@ describe Bigcommerce::Prometheus::Integrations::Resque::ActiveJobPayload do
       expect(@anchor).to be_nil
     end
 
+    it 'logs a warning when a timestamp cannot be parsed' do
+      expect(Bigcommerce::Prometheus.logger).to receive(:warn).with(/resque_job timestamp parse failure/)
+
+      described_class.new(inner_payload(enqueued_at: 'not a real time'))
+    end
+
     it 'returns nil for an empty string' do
       expect(described_class.new(inner_payload(enqueued_at: '')).anchor_time).to be_nil
     end

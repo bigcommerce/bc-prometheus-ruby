@@ -52,10 +52,13 @@ module Bigcommerce
 
           def parse_time(value)
             return value if value.is_a?(Time)
-            return nil if value.nil? || value.to_s.empty?
+            return nil if value.to_s.empty?
 
             Time.iso8601(value.to_s)
-          rescue ArgumentError
+          rescue ArgumentError => e
+            ::Bigcommerce::Prometheus.logger&.warn(
+              "[bigcommerce-prometheus] resque_job timestamp parse failure: #{e.message}"
+            )
             nil
           end
         end

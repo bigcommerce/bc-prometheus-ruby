@@ -120,5 +120,14 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobPayload do
       expect(payload).to be_a(Bigcommerce::Prometheus::Integrations::Resque::VanillaResquePayload)
       expect(payload.job_class).to eq('unknown')
     end
+
+    it 'logs payload parsing failures before falling back to unknown' do
+      job = double('Resque::Job')
+      allow(job).to receive(:payload).and_raise(StandardError, 'boom')
+
+      expect(Bigcommerce::Prometheus.logger).to receive(:warn).with(/resque_job payload parse failed: boom/)
+
+      described_class.for(job)
+    end
   end
 end
