@@ -42,6 +42,7 @@ require_relative 'prometheus/type_collectors/active_record'
 require_relative 'prometheus/instrumentors/web'
 require_relative 'prometheus/instrumentors/hutch'
 require_relative 'prometheus/instrumentors/resque'
+require_relative 'prometheus/instrumentors/protorabbit'
 require_relative 'prometheus/integrations/railtie' if defined?(Rails)
 require_relative 'prometheus/integrations/puma'
 require_relative 'prometheus/integrations/resque'

@@ -58,6 +58,21 @@ Vanilla Resque jobs (`Resque.enqueue`) carry no enqueue timestamps, so `queue_la
 
 Requires resque >= 1.27 workers running in the default fork-per-job mode — the hooks instrument `Resque::Worker#perform_with_fork`. Non-forking workers (`FORK_PER_JOB=false`, or platforms without `fork`) are not instrumented; a warning is logged at worker boot when per-job metrics are enabled but cannot record.
 
+## Protorabbit
+
+In your protorabbit worker boot code, do:
+
+```ruby
+require 'bigcommerce/prometheus'
+Bigcommerce::Prometheus::Instrumentors::Protorabbit.new.start
+```
+
+Note: protorabbit has no built-in tracer/middleware hook (unlike Hutch), so this instrumentor
+only starts the embedded exporter server and registers the generic ActiveRecord collector plus
+any custom collectors you configure via `protorabbit_collectors`/`protorabbit_type_collectors`.
+This unblocks any metrics already being pushed from within message processing (e.g. gRPC client
+interceptor metrics) that were previously refused because no exporter server was listening.
+
 ## Configuration
 
 After requiring the main file, you can further configure with:
@@ -177,6 +192,8 @@ if we want these collectors to run on our web, resque, and hutch processes, we'l
   c.resque_type_collectors = [AppTypeCollector.new]
   c.hutch_collectors = [AppCollector]
   c.hutch_type_collectors = [AppTypeCollector.new]
+  c.protorabbit_collectors = [AppCollector]
+  c.protorabbit_type_collectors = [AppTypeCollector.new]
 end
 ```
 

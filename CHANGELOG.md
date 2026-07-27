@@ -1,5 +1,9 @@
 Changelog for the bc-prometheus-ruby gem.
 
+## 0.9.0
+
+- Add `Bigcommerce::Prometheus::Instrumentors::Protorabbit` so protorabbit (RabbitMQ protobuf consumer) processes run an embedded Prometheus exporter server, fixing dropped/refused metric pushes (`Errno::ECONNREFUSED` on `/send-metrics`) from those processes.
+
 ## 0.8.3
 
 - Add opt-in per-Resque-job histograms `resque_job_queue_latency_seconds` and `resque_job_perform_duration_seconds`, labelled by `job_class`.
