@@ -16,7 +16,6 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 require 'spec_helper'
-require 'benchmark'
 require 'resque'
 
 ##
@@ -114,7 +113,13 @@ describe 'metric delivery from Resque forked children', :fork_integration do
   def run_jobs(count)
     count.times { Resque::Job.create(queue, ForkDeliveryProbeJob, 'n' => 1) }
     worker = Resque::Worker.new(queue)
-    Benchmark.realtime { count.times { worker.work_one_job } }
+
+    # Monotonic clock rather than Benchmark: benchmark stopped being a default gem in Ruby 4.0, and requiring it here
+    # would break every job in the suite, not just this one. RSpec loads all spec files before it applies tag filters,
+    # so a top-level require in an excluded file still runs.
+    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    count.times { worker.work_one_job }
+    Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
   end
 
   # @return [Float] seconds of instrumentation cost per job
