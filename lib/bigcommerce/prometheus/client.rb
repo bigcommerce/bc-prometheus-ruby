@@ -91,6 +91,27 @@ module Bigcommerce
           end
         end
       end
+
+      ##
+      # Discard the state a forked child inherited from its parent.
+      #
+      # The client is a singleton, so `fork` hands the child a copy of the parent's outbound queue while leaving the
+      # thread that would drain it behind. Anything still queued in the parent therefore has to be re-sent by the child,
+      # one request each, before the child reaches its own observation — and a Resque child is torn down by `exit!` long
+      # before that finishes. Discarding the copy is safe: the parent still holds the originals and sends them on its
+      # own schedule.
+      #
+      # The mutex is reset for a rarer case. If the fork lands while another thread holds it, the child inherits a
+      # locked mutex with no owner and deadlocks on its first push.
+      #
+      def reset_after_fork!
+        @queue = Queue.new
+        @worker_thread = nil
+        @mutex = Mutex.new
+        @socket = nil
+        @socket_started = nil
+        @socket_pid = nil
+      end
     end
   end
 end

@@ -1,5 +1,9 @@
 Changelog for the bc-prometheus-ruby gem.
 
+## Pending Release
+
+- Reset the Prometheus client in forked Resque children via `Resque.after_fork`. A child previously inherited a copy of the parent's undrained outbound queue and had to re-send every message in it before reaching its own, which Resque's `exit!` cut short. Observations pushed from inside a job were dropped as a result.
+
 ## 0.8.3
 
 - Add opt-in per-Resque-job histograms `resque_job_queue_latency_seconds` and `resque_job_perform_duration_seconds`, labelled by `job_class`.
