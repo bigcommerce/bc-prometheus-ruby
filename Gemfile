@@ -26,4 +26,13 @@ gem 'rubocop-performance', '>= 1.5'
 gem 'rubocop-rspec'
 gem 'simplecov', '>= 0.16'
 
+# Resque is an optional integration, but its fork-per-job lifecycle is the one thing the client has to survive, so the
+# integration needs real coverage rather than stubs.
+#
+# Resque depends on sinatra for its web UI with a loose `>= 0.9.2`. There is no Gemfile.lock in this repo, so CI
+# resolves cold and the resolver is free to pick an old sinatra that caps `rack < 3`, which conflicts with the
+# gemspec's `rack >= 3.0`. Pinning sinatra forward keeps the resolution rack-3 compatible.
+gem 'resque', '>= 2.0'
+gem 'sinatra', '>= 4.0'
+
 gemspec
