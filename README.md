@@ -64,6 +64,32 @@ accept the loss.
 Note that this applies to metrics your application code pushes from inside a job. The per-job histograms below are
 recorded in the parent and never pay this cost.
 
+### Measuring delivery and cost
+
+`bin/resque_fork_bench` forks real children against a real redis and a real listener, and reports how many of the
+observations pushed inside a job arrived and how much slower the job got. It needs a redis and takes tens of seconds, so
+it is a manual tool rather than part of `script/test`.
+
+```bash
+redis-server --port 6399 --save '' --appendonly no --daemonize yes
+
+REDIS_URL=redis://127.0.0.1:6399/15 bin/resque_fork_bench --smoke-test
+```
+
+`--smoke-test` sweeps a representative spread of job shapes. A single shape can be measured directly instead, varying
+how many metrics the job pushes, how much work separates them, and how much work follows the last one:
+
+```bash
+bin/resque_fork_bench --pushes 2 --gap 0.05      # two pushes, 50ms apart
+bin/resque_fork_bench --pushes 1 --trailing 0.01 # one push, then 10ms of work
+bin/resque_fork_bench --smoke-test --no-child-flush
+```
+
+Read the total column rather than the overhead column. Overhead subtracts a control run that performed the same sleeps,
+so it hides any part of a wait that overlapped the job's own work. `--help` lists the rest, including
+`--thread-sleep` for the drain cadence and `--redis-url`. Exits non-zero if any row lost an observation or exceeded the
+overhead budget the integration specs enforce.
+
 ### Per-job metrics (opt-in)
 
 Set `PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED=1` on Resque worker pods to enable two additional histograms recorded from the parent worker process.

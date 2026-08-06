@@ -1,0 +1,419 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Copyright (c) 2019-present, BigCommerce Pty. Ltd. All rights reserved
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+# documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+# persons to whom the Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
+# Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+# WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+# OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+# Measures what a Resque fork-per-job worker actually delivers to the collector, and what it costs per job to deliver
+# it. Forks real children against a real redis and a real listener.
+#
+# Two numbers come out of each run. How many of the observations pushed inside a job arrived, and how much slower the
+# job got. They are worth measuring together because changes in this area tend to trade one against the other: an
+# implementation can deliver everything by making every job wait, or keep every job fast by quietly dropping the
+# observations, and only looking at both catches either.
+#
+# Read the total column, not just the overhead column. Overhead subtracts a control run that performed the same sleeps,
+# so it hides any part of a wait that overlapped the job's own work.
+#
+# The spec at spec/integration/resque_fork_delivery_spec.rb asserts these same two properties on one fixed shape. This
+# is the exploratory version of it, for checking a change by hand before CI does.
+#
+require 'bundler/setup'
+require 'logger'
+require 'optparse'
+require 'resque'
+require 'bigcommerce/prometheus'
+require_relative '../spec/support/counting_exporter'
+
+##
+# The job under measurement. Everything that varies travels in the Resque payload rather than through globals, so the
+# forked child picks it up the way a real job picks up its arguments.
+#
+class ForkBenchProbeJob
+  METRIC_NAME = 'resque_fork_bench_probe'
+  @queue = :bc_prometheus_fork_bench
+
+  def self.perform(payload)
+    gap = payload['gap'].to_f
+    trailing = payload['trailing'].to_f
+
+    payload['pushes'].to_i.times do |index|
+      sleep(gap) if index.positive? && gap.positive?
+      push
+    end
+
+    # Work after the last push, with nothing pushed after it. This is what an asynchronous delivery needs in order to
+    # win: a job that returns the moment it has pushed gives the delivery no time at all.
+    sleep(trailing) if trailing.positive?
+  end
+
+  def self.push
+    ::Bigcommerce::Prometheus.client.send_json(
+      type: 'resque_fork_bench',
+      name: METRIC_NAME,
+      value: 1.0
+    )
+  end
+end
+
+##
+# One job shape to measure.
+#
+Shape = Struct.new(:pushes, :gap, :trailing, keyword_init: true)
+
+##
+# What one shape measured.
+#
+Result = Struct.new(:shape, :jobs, :control_seconds, :metrics_seconds, :delivered, keyword_init: true) do
+  def expected
+    jobs * shape.pushes
+  end
+
+  def control_ms
+    control_seconds / jobs * 1000
+  end
+
+  def total_ms
+    metrics_seconds / jobs * 1000
+  end
+
+  def overhead_ms
+    total_ms - control_ms
+  end
+
+  def complete?
+    delivered == expected
+  end
+end
+
+##
+# Runs the shapes and prints the table.
+#
+class ForkBench
+  # The budget spec/integration/resque_fork_delivery_spec.rb enforces on CI. Reported here so a local run can be
+  # compared against the thing that will actually block a merge.
+  OVERHEAD_BUDGET_MS = 25.0
+
+  # Long enough for a straggling delivery from the last child to land before its row is counted, so that a late arrival
+  # is not attributed to the next row.
+  SETTLE_SECONDS = 0.25
+
+  QUEUE = :bc_prometheus_fork_bench
+
+  # A representative spread rather than an exhaustive one. Rows 1 and 2 vary the work after the last push, which is what
+  # decides whether an asynchronous delivery ever gets to run. Rows 3 to 5 vary the work between two pushes, which is
+  # what decides whether the child ends up waiting on the client's drain cadence. Row 6 varies metrics per job, to show
+  # whether cost is per metric or per job.
+  SMOKE_SHAPES = [
+    Shape.new(pushes: 1, gap: 0.0, trailing: 0.0),
+    Shape.new(pushes: 1, gap: 0.0, trailing: 0.005),
+    Shape.new(pushes: 2, gap: 0.0, trailing: 0.0),
+    Shape.new(pushes: 2, gap: 0.05, trailing: 0.0),
+    Shape.new(pushes: 2, gap: 0.30, trailing: 0.0),
+    Shape.new(pushes: 5, gap: 0.0, trailing: 0.0)
+  ].freeze
+
+  ROW_FORMAT = '%6s  %8s  %9s | %10s  %10s  %10s | %s'
+  HEADINGS = ['pushes', 'gap', 'trailing', 'control', 'total', 'overhead', 'delivered'].freeze
+
+  def initialize(options)
+    @options = options
+  end
+
+  ##
+  # @return [Integer] process exit status
+  #
+  def call
+    return 1 unless redis_reachable?
+
+    setup
+    print_preamble
+    results = measure_all
+    print_footer(results)
+    print_listener_diagnostics
+    results.all? { |result| result.complete? && result.overhead_ms < OVERHEAD_BUDGET_MS } ? 0 : 1
+  ensure
+    @exporter&.stop
+  end
+
+  private
+
+  def shapes
+    return SMOKE_SHAPES if @options[:smoke_test]
+
+    [Shape.new(pushes: @options[:pushes], gap: @options[:gap], trailing: @options[:trailing])]
+  end
+
+  def jobs
+    @options[:jobs] || (@options[:smoke_test] ? 50 : 100)
+  end
+
+  # --- setup -------------------------------------------------------------
+
+  def redis_reachable?
+    Redis.new(url: @options[:redis_url], timeout: 1.0).ping
+    true
+  rescue StandardError => e
+    warn "Cannot reach redis at #{@options[:redis_url]}: #{e.message}"
+    warn 'Start one with: redis-server --port 6399 --save \'\' --appendonly no --daemonize yes'
+    false
+  end
+
+  def setup
+    Resque.redis = Redis.new(url: @options[:redis_url])
+    Resque.logger = Logger.new(File::NULL)
+
+    @exporter = CountingExporter.new.start
+
+    configure_prometheus
+    ::Bigcommerce::Prometheus::Integrations::Resque.start(client: client)
+  end
+
+  def configure_prometheus
+    exporter_port = @exporter.port
+    thread_sleep = @options[:thread_sleep]
+    log_device = @options[:verbose] ? $stderr : File::NULL
+
+    ::Bigcommerce::Prometheus.configure do |config|
+      config.enabled = true
+      config.logger = Logger.new(log_device)
+      config.server_host = '127.0.0.1'
+      config.server_port = exporter_port
+      config.client_thread_sleep = thread_sleep
+      config.resque_child_flush_enabled = @options[:child_flush]
+    end
+  end
+
+  ##
+  # The client is a singleton that reads host, port and drain cadence once, when it is first built. Set them on the
+  # instance as well as in the configuration so that the run is not at the mercy of whether something else built it
+  # first.
+  #
+  def client
+    @client ||= ::Bigcommerce::Prometheus.client.tap do |instance|
+      instance.instance_variable_set(:@host, '127.0.0.1')
+      instance.instance_variable_set(:@port, @exporter.port)
+      instance.instance_variable_set(:@thread_sleep, @options[:thread_sleep])
+      instance.reset_after_fork! if instance.respond_to?(:reset_after_fork!)
+    end
+  end
+
+  # --- measurement -------------------------------------------------------
+
+  def measure_all
+    shapes.map do |shape|
+      result = measure(shape)
+      puts row_for(result)
+      result
+    end
+  end
+
+  ##
+  # Times the same shape twice, once with metrics off and once on, so that the machine's own speed cancels out of the
+  # overhead figure. The sleeps happen in both runs; only the pushes are conditional.
+  #
+  # @param [Shape] shape
+  # @return [Result]
+  #
+  def measure(shape)
+    delivered_before = @exporter.count_for(ForkBenchProbeJob::METRIC_NAME)
+
+    ::Bigcommerce::Prometheus.enabled = false
+    control_seconds = time_run(shape)
+
+    ::Bigcommerce::Prometheus.enabled = true
+    metrics_seconds = time_run(shape)
+
+    sleep SETTLE_SECONDS
+
+    Result.new(
+      shape: shape,
+      jobs: jobs,
+      control_seconds: control_seconds,
+      metrics_seconds: metrics_seconds,
+      delivered: @exporter.count_for(ForkBenchProbeJob::METRIC_NAME) - delivered_before
+    )
+  end
+
+  ##
+  # Drains the queue one job at a time so the run contains no timers of its own. Each call still forks, runs the
+  # after_fork hooks and exits the child exactly as a live worker does.
+  #
+  # @param [Shape] shape
+  # @return [Float] seconds elapsed
+  #
+  def time_run(shape)
+    payload = { 'pushes' => shape.pushes, 'gap' => shape.gap, 'trailing' => shape.trailing }
+
+    Resque.redis.redis.del("queue:#{QUEUE}")
+    jobs.times { Resque::Job.create(QUEUE, ForkBenchProbeJob, payload) }
+    worker = Resque::Worker.new(QUEUE)
+
+    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    jobs.times { worker.work_one_job }
+    Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+  end
+
+  # --- output ------------------------------------------------------------
+
+  def print_preamble
+    puts "bc-prometheus-ruby #{::Bigcommerce::Prometheus::VERSION}   child flush: #{child_flush_state}   " \
+         "client_thread_sleep: #{@options[:thread_sleep]}s   redis: #{@options[:redis_url]}"
+    puts "#{jobs} jobs per row, run twice: once with metrics disabled as a control, once with them enabled."
+    puts 'Times are per job. delivered counts the envelopes that reached the listener.'
+    puts
+    puts "#{smoke_legend}\n" if @options[:smoke_test]
+    puts format(ROW_FORMAT, *HEADINGS)
+    puts separator
+  end
+
+  def smoke_legend
+    <<~LEGEND
+      Rows 1 and 2 vary the work after the last push, which is what an asynchronous delivery would need in order to win.
+      Rows 3 to 5 vary the work between two pushes, which is what decides whether the child waits on the drain cadence.
+      Row 6 varies metrics per job. Expect roughly #{estimated_seconds} seconds, longer if children have to wait.
+    LEGEND
+  end
+
+  def estimated_seconds
+    per_job = shapes.sum { |shape| shape.gap * (shape.pushes - 1) + shape.trailing + 0.004 }
+    (per_job * jobs * 2).round
+  end
+
+  def child_flush_state
+    unless defined?(::Bigcommerce::Prometheus::Integrations::Resque::ChildFlush)
+      return 'not available in this version'
+    end
+
+    @options[:child_flush] ? 'on' : 'off'
+  end
+
+  def row_for(result)
+    format(
+      ROW_FORMAT,
+      result.shape.pushes,
+      duration(result.shape.gap),
+      duration(result.shape.trailing),
+      milliseconds(result.control_ms),
+      milliseconds(result.total_ms),
+      milliseconds(result.overhead_ms),
+      "#{result.delivered}/#{result.expected}#{annotation(result)}"
+    )
+  end
+
+  def annotation(result)
+    notes = []
+    notes << "#{result.expected - result.delivered} lost" unless result.complete?
+    notes << 'over budget' if result.overhead_ms >= OVERHEAD_BUDGET_MS
+    notes.empty? ? '' : "   <- #{notes.join(', ')}"
+  end
+
+  def print_footer(results)
+    puts separator
+    incomplete = results.reject(&:complete?)
+    if incomplete.empty?
+      puts 'Every row delivered every observation.'
+    else
+      puts "#{incomplete.size} of #{results.size} rows lost observations."
+    end
+    puts format(
+      'Worst per-job overhead %.1f ms, against the %.1f ms budget the integration specs enforce.',
+      results.map(&:overhead_ms).max,
+      OVERHEAD_BUDGET_MS
+    )
+  end
+
+  ##
+  # Printed only when the listener saw something it could not account for. Distinguishes an observation the client never
+  # managed to send from one that arrived and was not counted, which is the difference between a delivery bug and a
+  # measurement bug.
+  #
+  def print_listener_diagnostics
+    stats = @exporter.stats
+    unaccounted = stats[:accepted] - stats[:send_metrics]
+    return if unaccounted.zero? && stats[:parse_error].zero? && stats[:serve_error].zero?
+
+    puts
+    puts "Listener accepted #{stats[:accepted]} connections and read #{stats[:send_metrics]} complete requests."
+    if stats[:abandoned].positive?
+      puts "Opened and then closed with no request line: #{stats[:abandoned]}. That is what a caller looks like when " \
+           'it dies between connecting and writing, so those observations left the queue and never reached the wire.'
+    end
+    puts "Malformed or short bodies: #{stats[:parse_error]} unparseable, #{stats[:short_body]} truncated, " \
+         "#{stats[:serve_error]} errored."
+  end
+
+  def separator
+    '-' * format(ROW_FORMAT, *HEADINGS).length
+  end
+
+  def duration(seconds)
+    seconds.positive? ? format('%g ms', seconds * 1000) : '-'
+  end
+
+  def milliseconds(value)
+    format('%.1f ms', value)
+  end
+end
+
+options = {
+  jobs: nil,
+  pushes: 1,
+  gap: 0.0,
+  trailing: 0.0,
+  thread_sleep: 0.5,
+  child_flush: true,
+  redis_url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/15'),
+  smoke_test: false,
+  verbose: false
+}
+
+OptionParser.new do |parser|
+  parser.banner = 'Usage: bin/resque_fork_bench [options]'
+  parser.separator ''
+  parser.separator 'Job shape:'
+  parser.on('-j', '--jobs N', Integer, 'Jobs per row (default 100, or 50 with --smoke-test)') { |v| options[:jobs] = v }
+  parser.on('-p', '--pushes N', Integer, 'Metrics the job pushes (default 1)') { |v| options[:pushes] = v }
+  parser.on('-g', '--gap SECONDS', Float, 'Work between pushes (default 0)') { |v| options[:gap] = v }
+  parser.on('-t', '--trailing SECONDS', Float, 'Work after the last push (default 0)') { |v| options[:trailing] = v }
+  parser.separator ''
+  parser.separator 'Client:'
+  parser.on('-s', '--thread-sleep SECONDS', Float, 'client_thread_sleep, the drain cadence (default 0.5)') do |v|
+    options[:thread_sleep] = v
+  end
+  parser.on('--[no-]child-flush', 'Deliver a child\'s own queue before it exits (default on)') do |v|
+    options[:child_flush] = v
+  end
+  parser.separator ''
+  parser.separator 'Run:'
+  parser.on('--smoke-test', 'Sweep a representative spread of shapes instead of one') { options[:smoke_test] = true }
+  parser.on('--redis-url URL', 'Redis to run Resque against (default $REDIS_URL or db 15 on localhost)') do |v|
+    options[:redis_url] = v
+  end
+  parser.on('-v', '--verbose', 'Send the gem\'s own log to stderr') { options[:verbose] = true }
+  parser.on('-h', '--help', 'Show this message') do
+    puts parser
+    exit 0
+  end
+  parser.separator ''
+  parser.separator 'Exits non-zero if any row lost an observation or exceeded the specs\' overhead budget.'
+  parser.separator ''
+  parser.separator 'Examples:'
+  parser.separator '  bin/resque_fork_bench --smoke-test'
+  parser.separator '  bin/resque_fork_bench --pushes 2 --gap 0.05         # the shape that cost 500ms per job'
+  parser.separator '  bin/resque_fork_bench --smoke-test --no-child-flush # what the same sweep looks like without it'
+end.parse!
+
+exit ForkBench.new(options).call

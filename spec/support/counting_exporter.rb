@@ -33,6 +33,7 @@ class CountingExporter
     @server = TCPServer.new('127.0.0.1', 0)
     @port = @server.addr[1]
     @envelopes = []
+    @stats = Hash.new(0)
     @mutex = Mutex.new
   end
 
@@ -63,14 +64,37 @@ class CountingExporter
     @mutex.synchronize { @envelopes.count { |envelope| envelope['name'] == name } }
   end
 
+  ##
+  # What happened at the socket layer, which is what separates an observation that was never sent from one that was sent
+  # and not counted. Keys, all counts:
+  #
+  # - `accepted`: connections established
+  # - `send_metrics`: complete requests to /send-metrics
+  # - `abandoned`: connections established and then closed with no request line, the signature of a caller that died
+  #   between connecting and writing
+  # - `short_body`: fewer bytes arrived than Content-Length promised
+  # - `parse_error`, `serve_error`: malformed body, and anything else raised while serving
+  #
+  # @return [Hash]
+  #
+  def stats
+    @mutex.synchronize { @stats.dup }
+  end
+
   private
 
   def serve(socket)
+    count(:accepted)
     request_line = socket.gets
+    count(:abandoned) if request_line.nil?
     body = read_body(socket)
-    record(body) if request_line.to_s.include?('/send-metrics')
+    if request_line.to_s.include?('/send-metrics')
+      count(:send_metrics)
+      record(body)
+    end
     socket.write("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK")
   rescue StandardError
+    count(:serve_error)
     nil
   ensure
     begin
@@ -85,13 +109,20 @@ class CountingExporter
     while (line = socket.gets) && line != "\r\n"
       content_length = line.split(':', 2).last.to_i if line.downcase.start_with?('content-length:')
     end
-    content_length.positive? ? socket.read(content_length).to_s : ''
+    return '' unless content_length.positive?
+
+    socket.read(content_length).to_s.tap { |body| count(:short_body) if body.bytesize < content_length }
   end
 
   def record(body)
     envelope = JSON.parse(body)
     @mutex.synchronize { @envelopes << envelope }
   rescue JSON::ParserError
+    count(:parse_error)
     nil
+  end
+
+  def count(key)
+    @mutex.synchronize { @stats[key] += 1 }
   end
 end
