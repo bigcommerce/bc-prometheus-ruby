@@ -26,4 +26,8 @@ RSpec.configure do |config|
     mocks.allow_message_expectations_on_nil = true
   end
   config.color = true
+
+  # Specs tagged :fork_integration fork real Resque children and need a redis, so they are opt-in rather than part of
+  # the default run. Enable with FORK_INTEGRATION=1.
+  config.filter_run_excluding(:fork_integration) unless ENV.fetch('FORK_INTEGRATION', nil)
 end
