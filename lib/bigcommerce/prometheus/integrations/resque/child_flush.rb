@@ -18,35 +18,25 @@
 module Bigcommerce
   module Prometheus
     module Integrations
-      ##
-      # Plugin for resque
-      #
       class Resque
         ##
-        # Start the resque integration
+        # Deliver a forked child's observations before Resque tears it down, by waiting on the client's background
+        # drain thread.
         #
-        def self.start(client: nil)
-          install_child_flush
-          ::PrometheusExporter::Instrumentation::Process.start(
-            client: client || ::Bigcommerce::Prometheus.client,
-            type: ::Bigcommerce::Prometheus.resque_process_label
-          )
-          ::Bigcommerce::Prometheus::Collectors::Resque.start(
-            client: client || ::Bigcommerce::Prometheus.client,
-            frequency: ::Bigcommerce::Prometheus.resque_collection_frequency
-          )
-          ::Bigcommerce::Prometheus::Integrations::Resque::JobMetrics.start(
-            client: client || ::Bigcommerce::Prometheus.client
-          )
-        end
+        # This is not a proposal. It reconstructs the approach taken by bigpay PR #10597, which shipped and was
+        # reverted, so that the fork delivery specs can be run against it.
+        #
+        module ChildFlush
+          # bigpay passed 2 seconds. The value is an upper bound, not a cost: `stop` returns as soon as the queue is
+          # observed empty.
+          WAIT_TIMEOUT_SECONDS = 2
 
-        def self.install_child_flush
-          return if @child_flush_installed
-
-          ::Resque::Worker.prepend(ChildFlush)
-          @child_flush_installed = true
+          def perform(job, &block)
+            super
+          ensure
+            ::Bigcommerce::Prometheus.client.stop(wait_timeout_seconds: WAIT_TIMEOUT_SECONDS) if fork_per_job?
+          end
         end
-        private_class_method :install_child_flush
       end
     end
   end
