@@ -43,6 +43,27 @@ require 'bigcommerce/prometheus'
 Bigcommerce::Prometheus::Instrumentors::Resque.new(app: Rails.application).start
 ```
 
+### Metrics pushed from inside a job
+
+Resque runs each job in a forked child that ends with `exit!`, which runs no at_exit handlers and does not wait for
+threads. Pushing a metric only queues it; delivery happens on a background thread that wakes every
+`client_thread_sleep` seconds. A child that pushes and then returns is normally torn down before that thread runs, so
+the observation is silently discarded.
+
+Two things are done automatically to make an in-child push arrive:
+
+- The child is given a clean client queue at fork time, via `Resque.after_fork`. Without this it would inherit a copy
+  of whatever the parent had not yet drained and have to re-send all of it before reaching its own message.
+- The child delivers its own queue on the calling thread before the job returns, by wrapping
+  `Resque::Worker#perform`.
+
+Cost is one request to the local collector per job that pushed something, and nothing at all for jobs that pushed
+nothing. Disable with `PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED=0` if a service would rather have the throughput and can
+accept the loss.
+
+Note that this applies to metrics your application code pushes from inside a job. The per-job histograms below are
+recorded in the parent and never pay this cost.
+
 ### Per-job metrics (opt-in)
 
 Set `PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED=1` on Resque worker pods to enable two additional histograms recorded from the parent worker process.
@@ -67,6 +88,8 @@ After requiring the main file, you can further configure with:
 | client_custom_labels | A hash of custom labels to send with each client request | `{}` | None |
 | client_max_queue_size | The max amount of metrics to send before flushing | `10000` | `ENV['PROMETHEUS_CLIENT_MAX_QUEUE_SIZE']` |
 | client_thread_sleep | How often to sleep the worker thread that manages the client buffer (seconds) | `0.5` | `ENV['PROMETHEUS_CLIENT_THREAD_SLEEP']` |
+| client_open_timeout | Connect timeout when delivering to the collector (seconds) | `0.5` | `ENV['PROMETHEUS_CLIENT_OPEN_TIMEOUT']` |
+| client_read_timeout | Response timeout when delivering to the collector (seconds) | `1.0` | `ENV['PROMETHEUS_CLIENT_READ_TIMEOUT']` |
 | puma_collection_frequency | How often to poll puma collection metrics (seconds) | `30` | `ENV['PROMETHEUS_PUMA_COLLECTION_FREQUENCY']` |
 | server_host | The host to run the exporter on | `"0.0.0.0"` | `ENV['PROMETHEUS_SERVER_HOST']` |
 | server_port | The port to run the exporter on | `9394` | `ENV['PROMETHEUS_SERVER_PORT']` |
@@ -74,6 +97,7 @@ After requiring the main file, you can further configure with:
 | process_name | What the current process name is (used in logging) | `"unknown"` | `ENV['PROCESS']` |
 | railtie_disabled | Opt out flag for Railtie; use `Bigcommerce::Prometheus::Instrumentors::Web.new(app: Rails.application).start` in your app's code to start it up yourself  | `0` | `ENV['PROMETHEUS_DISABLE_RAILTIE']` |
 | resque_per_job_metrics_enabled | Enable per-job queue-latency and perform-duration histograms (parent-side, no synchronous flush) | `0` | `ENV['PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED']` |
+| resque_child_flush_enabled | Deliver a forked child's own queued metrics before Resque exits it | `1` | `ENV['PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED']` |
 
 ## Custom Collectors
 

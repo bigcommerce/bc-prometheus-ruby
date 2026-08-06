@@ -28,9 +28,11 @@ module Bigcommerce
         def self.start(client: nil)
           resque_client = client || ::Bigcommerce::Prometheus.client
 
-          # Installed first, and independently of the flag below. It is the safety net for every observation pushed
-          # from a forked child, so it must not depend on the collectors that follow starting successfully.
+          # Installed first, and independently of the flag below. Together these are the safety net for every
+          # observation pushed from a forked child, so they must not depend on the collectors that follow starting
+          # successfully. Order matters between them: the reset is what keeps the flush down to a single request.
           install_fork_reset(resque_client)
+          install_child_flush
 
           ::PrometheusExporter::Instrumentation::Process.start(
             client: resque_client,
@@ -64,6 +66,24 @@ module Bigcommerce
           @fork_reset_installed = true
         end
         private_class_method :install_fork_reset
+
+        ##
+        # Deliver a forked child's own observations before Resque's `exit!` discards them.
+        #
+        # Prepends rather than using a Resque hook because Resque has no in-child hook that runs after the job body.
+        # `Resque::Worker#perform` is that boundary.
+        #
+        # Idempotent, since a repeated prepend of an already-prepended module is a no-op but the guard keeps the
+        # intent explicit.
+        #
+        def self.install_child_flush
+          return if @child_flush_installed
+          return unless ::Bigcommerce::Prometheus.resque_child_flush_enabled
+
+          ::Resque::Worker.prepend(ChildFlush)
+          @child_flush_installed = true
+        end
+        private_class_method :install_child_flush
       end
     end
   end
