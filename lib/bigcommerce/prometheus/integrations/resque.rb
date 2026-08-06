@@ -78,10 +78,21 @@ module Bigcommerce
         #
         def self.install_child_flush
           return if @child_flush_installed
-          return unless ::Bigcommerce::Prometheus.resque_child_flush_enabled
+
+          unless ::Bigcommerce::Prometheus.resque_child_flush_enabled
+            ::Bigcommerce::Prometheus.logger&.warn(
+              '[bigcommerce-prometheus] resque child metric flush is disabled; metrics pushed from inside a job will ' \
+              'not be delivered'
+            )
+            return
+          end
 
           ::Resque::Worker.prepend(ChildFlush)
           @child_flush_installed = true
+          ::Bigcommerce::Prometheus.logger&.info(
+            '[bigcommerce-prometheus] resque child metric flush installed; a job that pushes metrics delivers them ' \
+            'before the child exits'
+          )
         end
         private_class_method :install_child_flush
       end
