@@ -82,7 +82,8 @@ describe 'metric delivery from Resque forked children', :fork_integration do
     client = Bigcommerce::Prometheus.client
     client.instance_variable_set(:@host, '127.0.0.1')
     client.instance_variable_set(:@port, exporter.port)
-    client.reset_after_fork!
+    # 0.8.3 has no `reset_after_fork!`. Clearing the queue directly is the only part of it this setup needs.
+    client.instance_variable_get(:@queue).clear
 
     Bigcommerce::Prometheus::Integrations::Resque.start(client: client)
   end
