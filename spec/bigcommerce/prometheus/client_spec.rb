@@ -68,10 +68,40 @@ describe Bigcommerce::Prometheus::Client do
     after { client.reset_after_fork! }
 
     context 'when nothing is queued' do
-      it 'delivers nothing, so a caller that never pushed pays nothing' do
-        allow(client).to receive(:process_queue)
+      it 'sends nothing, so a caller that never pushed pays nothing' do
+        allow(Net::HTTP).to receive(:new)
         client.flush!
-        expect(client).not_to have_received(:process_queue)
+        expect(Net::HTTP).not_to have_received(:new)
+      end
+    end
+
+    context 'when the background thread is part way through a delivery' do
+      # The bug this exists to catch: `flush!` used to return as soon as the queue looked empty, and the queue looks
+      # empty the instant the worker thread pops the last message, well before that message reaches the wire. A child
+      # that exits at that point destroys the request.
+      #
+      # Rendezvous rather than sleeps, so the interleaving is fixed rather than hoped for. The only timing in the
+      # example is the join timeout, which asserts a negative and is therefore generous.
+      let(:entered_delivery) { Queue.new }
+      let(:release_delivery) { Queue.new }
+
+      before do
+        allow(client).to receive(:post_message) do
+          entered_delivery << true
+          release_delivery.pop
+        end
+        client.instance_variable_get(:@queue) << 'in_flight_message'
+      end
+
+      it 'does not return until that delivery has finished' do
+        Thread.new { client.process_queue }
+        entered_delivery.pop
+
+        flusher = Thread.new { client.flush! }
+        expect(flusher.join(0.2)).to be_nil
+
+        release_delivery << true
+        expect(flusher.join(2)).to eq flusher
       end
     end
 
@@ -152,6 +182,12 @@ describe Bigcommerce::Prometheus::Client do
       client.instance_variable_get(:@mutex).lock
       client.reset_after_fork!
       expect(client.instance_variable_get(:@mutex)).not_to be_locked
+    end
+
+    it 'replaces the delivery mutex too, so the first delivery in the child cannot deadlock' do
+      client.instance_variable_get(:@delivery_mutex).lock
+      client.reset_after_fork!
+      expect(client.instance_variable_get(:@delivery_mutex)).not_to be_locked
     end
 
     context 'with socket state inherited from the parent' do

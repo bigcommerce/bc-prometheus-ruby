@@ -55,7 +55,8 @@ Two things are done automatically to make an in-child push arrive:
 - The child is given a clean client queue at fork time, via `Resque.after_fork`. Without this it would inherit a copy
   of whatever the parent had not yet drained and have to re-send all of it before reaching its own message.
 - The child delivers its own queue on the calling thread before the job returns, by wrapping
-  `Resque::Worker#perform`.
+  `Resque::Worker#perform`. Delivery is serialised against the background thread, so a request already in progress
+  finishes before the child exits rather than being destroyed with it.
 
 Cost is one request to the local collector per job that pushed something, and nothing at all for jobs that pushed
 nothing. Disable with `PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED=0` if a service would rather have the throughput and can

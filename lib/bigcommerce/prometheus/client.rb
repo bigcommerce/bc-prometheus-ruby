@@ -44,6 +44,7 @@ module Bigcommerce
         @process_name = process_name || ::Bigcommerce::Prometheus.process_name
         @open_timeout = ::Bigcommerce::Prometheus.client_open_timeout
         @read_timeout = ::Bigcommerce::Prometheus.client_read_timeout
+        @delivery_mutex = Mutex.new
       end
 
       ##
@@ -82,14 +83,21 @@ module Bigcommerce
       ##
       # Process the current queue and flush to the collector
       #
+      # Serialised so that only one thread is ever delivering. Two callers reach here, the background worker thread and
+      # `flush!` on the caller's own thread, and without the lock either could return while the other still had a
+      # message in flight. It also closes a hang: both threads can see a length of one, both call `pop`, and the loser
+      # blocks on an empty queue forever.
+      #
       def process_queue
-        while @queue.length.to_i.positive?
-          begin
-            message = @queue.pop
-            post_message(message)
-          rescue StandardError => e
-            logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter is dropping a message to #{uri_path('/send-metrics')}: #{e}"
-            raise
+        @delivery_mutex.synchronize do
+          while @queue.length.to_i.positive?
+            begin
+              message = @queue.pop
+              post_message(message)
+            rescue StandardError => e
+              logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter is dropping a message to #{uri_path('/send-metrics')}: #{e}"
+              raise
+            end
           end
         end
       end
@@ -101,12 +109,14 @@ module Bigcommerce
       # seconds. A process that is about to exit does not get that far, so anything pushed shortly before exit is
       # discarded with it. Callers that are about to exit should flush.
       #
-      # A no-op when nothing is queued, so callers that never push pay nothing. Never raises: metric delivery must not
-      # take down the work that produced the metric.
+      # Returns once everything is delivered, including anything the background thread had already taken off the queue
+      # and was part way through sending. An empty queue is not the same as an empty wire, so this deliberately does not
+      # short circuit on one: the message the worker thread popped a microsecond ago is exactly the one about to be lost.
+      #
+      # A caller that pushed nothing pays one uncontended lock acquire, since a process that never pushed never started
+      # a worker thread. Never raises: metric delivery must not take down the work that produced the metric.
       #
       def flush!
-        return if @queue.empty?
-
         process_queue
       rescue StandardError => e
         logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter failed to flush: #{e}"
@@ -121,13 +131,15 @@ module Bigcommerce
       # before that finishes. Discarding the copy is safe: the parent still holds the originals and sends them on its
       # own schedule.
       #
-      # The mutex is reset for a rarer case. If the fork lands while another thread holds it, the child inherits a
-      # locked mutex with no owner and deadlocks on its first push.
+      # Both mutexes are reset for a rarer case. If the fork lands while another thread holds one, the child inherits a
+      # locked mutex with no owner, and blocks forever the first time it needs it. For `@mutex` that is the first push,
+      # and for `@delivery_mutex` it is the first delivery.
       #
       def reset_after_fork!
         @queue = Queue.new
         @worker_thread = nil
         @mutex = Mutex.new
+        @delivery_mutex = Mutex.new
         @socket = nil
         @socket_started = nil
         @socket_pid = nil

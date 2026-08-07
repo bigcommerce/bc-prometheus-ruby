@@ -4,6 +4,7 @@ Changelog for the bc-prometheus-ruby gem.
 
 - Reset the Prometheus client in forked Resque children via `Resque.after_fork`. A child previously inherited a copy of the parent's undrained outbound queue and had to re-send every message in it before reaching its own, which Resque's `exit!` cut short. Observations pushed from inside a job were dropped as a result.
 - Deliver a forked Resque child's own queued metrics before the child exits, by wrapping `Resque::Worker#perform`. Pushing only queues, and `exit!` does not wait for the thread that would deliver it, so metrics pushed from inside a job were unreliable regardless of the above. Costs one request per job that pushed something and nothing for jobs that did not. Disable with `PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED=0`.
+- Serialise delivery to the collector on its own mutex, so a flush cannot return while the background thread still has a message in flight. An empty queue is not an empty wire: the worker thread pops before it sends, and a child exiting in that window destroyed the request. Also removes a hang where both threads saw one queued message, both called `pop`, and the loser blocked forever.
 - Bound the connect and response timeouts when delivering to the collector, configurable via `PROMETHEUS_CLIENT_OPEN_TIMEOUT` and `PROMETHEUS_CLIENT_READ_TIMEOUT`. `Net::HTTP.post` defaults to a 60 second connect timeout, which an unreachable collector could previously impose on the caller.
 
 ## 0.8.3
