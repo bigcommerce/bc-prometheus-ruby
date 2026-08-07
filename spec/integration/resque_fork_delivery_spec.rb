@@ -74,6 +74,9 @@ describe 'metric delivery from Resque forked children', :fork_integration do
       config.logger = Logger.new(File::NULL)
       config.server_host = '127.0.0.1'
       config.server_port = exporter.port
+      # Far above the 20ms default. Completeness here is a claim about whether the child delivers at all, not about
+      # whether it wins a race against a deadline, and a loaded CI runner would otherwise make that flaky.
+      config.client_flush_timeout = 5.0
     end
 
     # The client is a singleton that captures host and port when it is first built, which earlier specs in the run may
@@ -82,6 +85,7 @@ describe 'metric delivery from Resque forked children', :fork_integration do
     client = Bigcommerce::Prometheus.client
     client.instance_variable_set(:@host, '127.0.0.1')
     client.instance_variable_set(:@port, exporter.port)
+    client.instance_variable_set(:@flush_timeout, 5.0)
     client.reset_after_fork!
 
     Bigcommerce::Prometheus::Integrations::Resque.start(client: client)

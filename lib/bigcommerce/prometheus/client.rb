@@ -24,6 +24,12 @@ module Bigcommerce
       include Singleton
       include Loggable
 
+      # How often `flush!` retries the delivery lock while waiting for another thread to finish sending.
+      LOCK_POLL_SECONDS = 0.001
+
+      # Below this there is no point starting a request, so the remaining budget is spent reporting the drop instead.
+      MINIMUM_ATTEMPT_SECONDS = 0.001
+
       ##
       # @param [String] host
       # @param [Integer] port
@@ -44,6 +50,8 @@ module Bigcommerce
         @process_name = process_name || ::Bigcommerce::Prometheus.process_name
         @open_timeout = ::Bigcommerce::Prometheus.client_open_timeout
         @read_timeout = ::Bigcommerce::Prometheus.client_read_timeout
+        @write_timeout = ::Bigcommerce::Prometheus.client_write_timeout
+        @flush_timeout = ::Bigcommerce::Prometheus.client_flush_timeout
         @delivery_mutex = Mutex.new
       end
 
@@ -89,17 +97,7 @@ module Bigcommerce
       # blocks on an empty queue forever.
       #
       def process_queue
-        @delivery_mutex.synchronize do
-          while @queue.length.to_i.positive?
-            begin
-              message = @queue.pop
-              post_message(message)
-            rescue StandardError => e
-              logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter is dropping a message to #{uri_path('/send-metrics')}: #{e}"
-              raise
-            end
-          end
-        end
+        @delivery_mutex.synchronize { drain }
       end
 
       ##
@@ -113,13 +111,20 @@ module Bigcommerce
       # and was part way through sending. An empty queue is not the same as an empty wire, so this deliberately does not
       # short circuit on one: the message the worker thread popped a microsecond ago is exactly the one about to be lost.
       #
+      # Bounded by `client_flush_timeout`, covering the wait for the delivery lock and the requests themselves. The
+      # caller is normally about to exit and is holding up real work while it waits, so an unhealthy collector must cost
+      # it a known amount rather than however long the network takes to give up. Past the deadline the observations are
+      # abandoned and reported, because availability of the work matters more than completeness of its metrics.
+      #
       # A caller that pushed nothing pays one uncontended lock acquire, since a process that never pushed never started
       # a worker thread. Never raises: metric delivery must not take down the work that produced the metric.
       #
       def flush!
-        process_queue
+        deliver_before(monotonic_now + @flush_timeout)
       rescue StandardError => e
-        logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter failed to flush: #{e}"
+        report("Prometheus Exporter failed to flush: #{e}")
+      ensure
+        report_undelivered
       end
 
       ##
@@ -148,20 +153,108 @@ module Bigcommerce
       private
 
       ##
+      # Take the delivery lock, send what is queued, and give the lock back. Gives up rather than queueing behind a
+      # delivery that will not finish in time.
+      #
+      # @param [Float] deadline monotonic clock reading to stop by
+      #
+      def deliver_before(deadline)
+        return unless acquire_delivery_lock(deadline)
+
+        begin
+          drain(deadline)
+        ensure
+          @delivery_mutex.unlock
+        end
+      end
+
+      ##
+      # @param [Float] deadline
+      # @return [Boolean] whether the lock was taken
+      #
+      def acquire_delivery_lock(deadline)
+        until @delivery_mutex.try_lock
+          return false if monotonic_now >= deadline
+
+          sleep LOCK_POLL_SECONDS
+        end
+        true
+      end
+
+      ##
+      # Send queued messages one at a time. The caller owns the delivery lock.
+      #
+      # @param [Float|NilClass] deadline monotonic clock reading to stop by, or nil to keep going until the queue is
+      #   empty. The background thread passes nil, since it holds nothing up by waiting.
+      #
+      def drain(deadline = nil)
+        while @queue.length.to_i.positive?
+          timeout = deadline && (deadline - monotonic_now)
+          break if timeout && timeout < MINIMUM_ATTEMPT_SECONDS
+
+          begin
+            post_message(@queue.pop, timeout: timeout)
+          rescue StandardError => e
+            report("dropping a message to #{uri_path('/send-metrics')}: #{e}")
+            raise
+          end
+        end
+      end
+
+      ##
       # Post a single message with bounded timeouts.
       #
-      # `Net::HTTP.post` defaults to a 60 second open timeout. That is survivable on the background thread and is not
-      # survivable inline in a job, where an unreachable exporter would stall every unit of work for a minute. The
-      # collector is normally on localhost, so the defaults here are short.
+      # `Net::HTTP` defaults every timeout to 60 seconds. That is survivable on the background thread and is not
+      # survivable inline in a job, where an unhealthy collector would stall every unit of work. The collector is
+      # normally on localhost, so the defaults here are short, and an inline flush overrides them with whatever is left
+      # of its budget.
+      #
+      # @param [String] message
+      # @param [Float|NilClass] timeout overrides all three phases when given
+      #
+      def post_message(message, timeout: nil)
+        uri = uri_path('/send-metrics')
+        http = ::Net::HTTP.new(uri.host, uri.port)
+        http.open_timeout = timeout || @open_timeout
+        http.read_timeout = timeout || @read_timeout
+        http.write_timeout = timeout || @write_timeout
+        http.start { |connection| connection.post(uri.path, message) }
+      end
+
+      ##
+      # Say so when observations are abandoned, rather than letting them disappear silently. This is the only signal
+      # that a collector outage is costing metrics, since the metric that would have reported it is the one being lost.
+      #
+      def report_undelivered
+        undelivered = @queue.size
+        return if undelivered.zero?
+
+        report(
+          "abandoned #{undelivered} metric(s) after #{(@flush_timeout * 1000).round}ms: " \
+          "#{uri_path('/send-metrics')} did not accept them in time"
+        )
+      end
+
+      ##
+      # Warn, then push the line out of the process.
+      #
+      # Callers of `flush!` are usually about to be torn down by `exit!`, which runs no handlers and flushes no
+      # buffers. A warning sitting in a buffered STDOUT is destroyed along with the metric it was reporting, so the
+      # buffers are emptied here rather than left to an exit that will never come.
       #
       # @param [String] message
       #
-      def post_message(message)
-        uri = uri_path('/send-metrics')
-        http = ::Net::HTTP.new(uri.host, uri.port)
-        http.open_timeout = @open_timeout
-        http.read_timeout = @read_timeout
-        http.start { |connection| connection.post(uri.path, message) }
+      def report(message)
+        logger.warn "[bigcommerce-prometheus][#{@process_name}] #{message}"
+        $stdout.flush
+        $stderr.flush
+      rescue StandardError
+        nil
+      end
+
+      # @return [Float]
+      def monotonic_now
+        Process.clock_gettime(Process::CLOCK_MONOTONIC)
       end
     end
   end

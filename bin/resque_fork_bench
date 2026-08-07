@@ -69,6 +69,43 @@ class ForkBenchProbeJob
 end
 
 ##
+# Stands in for a collector that is not working, so the cost of an outage can be measured rather than argued about.
+#
+# `stalled` accepts the connection and then never answers, which is what a saturated exporter looks like from the
+# client's side and is the expensive case. `down` leaves nothing listening, so connections are refused immediately and
+# cost nothing. Presents the same interface as CountingExporter, and counts nothing, because nothing arrives.
+#
+class UnhealthyCollector
+  attr_reader :port
+
+  def initialize(mode)
+    server = TCPServer.new('127.0.0.1', 0)
+    @port = server.addr[1]
+    @server = mode == 'down' ? server.close : server
+    @accepted = []
+  end
+
+  def start
+    @thread = Thread.new { loop { @accepted << @server.accept } } if @server
+    self
+  end
+
+  def stop
+    @thread&.kill
+    @accepted.each(&:close)
+    @server&.close
+  end
+
+  def count_for(_name)
+    0
+  end
+
+  def stats
+    Hash.new(0)
+  end
+end
+
+##
 # One job shape to measure.
 #
 Shape = Struct.new(:pushes, :gap, :trailing, keyword_init: true)
@@ -175,7 +212,11 @@ class ForkBench
     Resque.redis = Redis.new(url: @options[:redis_url])
     Resque.logger = Logger.new(File::NULL)
 
-    @exporter = CountingExporter.new.start
+    @exporter = if @options[:collector] == 'healthy'
+                  CountingExporter.new.start
+                else
+                  UnhealthyCollector.new(@options[:collector]).start
+                end
 
     configure_prometheus
     ::Bigcommerce::Prometheus::Integrations::Resque.start(client: client)
@@ -192,6 +233,7 @@ class ForkBench
       config.server_host = '127.0.0.1'
       config.server_port = exporter_port
       config.client_thread_sleep = thread_sleep
+      config.client_flush_timeout = @options[:flush_timeout]
       config.resque_child_flush_enabled = @options[:child_flush]
     end
   end
@@ -206,6 +248,7 @@ class ForkBench
       instance.instance_variable_set(:@host, '127.0.0.1')
       instance.instance_variable_set(:@port, @exporter.port)
       instance.instance_variable_set(:@thread_sleep, @options[:thread_sleep])
+      instance.instance_variable_set(:@flush_timeout, @options[:flush_timeout])
       instance.reset_after_fork! if instance.respond_to?(:reset_after_fork!)
     end
   end
@@ -270,7 +313,8 @@ class ForkBench
 
   def print_preamble
     puts "bc-prometheus-ruby #{::Bigcommerce::Prometheus::VERSION}   child flush: #{child_flush_state}   " \
-         "client_thread_sleep: #{@options[:thread_sleep]}s   redis: #{@options[:redis_url]}"
+         "flush timeout: #{(@options[:flush_timeout] * 1000).round}ms   " \
+         "client_thread_sleep: #{@options[:thread_sleep]}s   collector: #{@options[:collector]}"
     puts "#{jobs} jobs per row, run twice: once with metrics disabled as a control, once with them enabled."
     puts 'Times are per job. delivered counts the envelopes that reached the listener.'
     puts
@@ -374,7 +418,9 @@ options = {
   gap: 0.0,
   trailing: 0.0,
   thread_sleep: 0.5,
+  flush_timeout: Bigcommerce::Prometheus.client_flush_timeout,
   child_flush: true,
+  collector: 'healthy',
   redis_url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/15'),
   smoke_test: false,
   verbose: false
@@ -393,12 +439,19 @@ OptionParser.new do |parser|
   parser.on('-s', '--thread-sleep SECONDS', Float, 'client_thread_sleep, the drain cadence (default 0.5)') do |v|
     options[:thread_sleep] = v
   end
+  parser.on('-f', '--flush-timeout SECONDS', Float, 'What a child will spend delivering before giving up') do |v|
+    options[:flush_timeout] = v
+  end
   parser.on('--[no-]child-flush', 'Deliver a child\'s own queue before it exits (default on)') do |v|
     options[:child_flush] = v
   end
   parser.separator ''
   parser.separator 'Run:'
   parser.on('--smoke-test', 'Sweep a representative spread of shapes instead of one') { options[:smoke_test] = true }
+  parser.on('--collector MODE', %w[healthy stalled down],
+            'healthy (default), stalled (accepts, never answers) or down (refused)') do |v|
+    options[:collector] = v
+  end
   parser.on('--redis-url URL', 'Redis to run Resque against (default $REDIS_URL or db 15 on localhost)') do |v|
     options[:redis_url] = v
   end

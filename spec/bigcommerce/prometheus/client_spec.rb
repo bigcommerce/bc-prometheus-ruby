@@ -60,12 +60,18 @@ describe Bigcommerce::Prometheus::Client do
     # Populated directly rather than through #send, which starts the background thread and would race the assertion.
     let(:queue) { client.instance_variable_get(:@queue) }
 
+    let(:delivery_mutex) { client.instance_variable_get(:@delivery_mutex) }
+
     before do
       allow(Bigcommerce::Prometheus).to receive(:enabled).and_return(true)
+      @original_flush_timeout = client.instance_variable_get(:@flush_timeout)
       client.reset_after_fork!
     end
 
-    after { client.reset_after_fork! }
+    after do
+      client.instance_variable_set(:@flush_timeout, @original_flush_timeout)
+      client.reset_after_fork!
+    end
 
     context 'when nothing is queued' do
       it 'sends nothing, so a caller that never pushed pays nothing' do
@@ -86,11 +92,13 @@ describe Bigcommerce::Prometheus::Client do
       let(:release_delivery) { Queue.new }
 
       before do
+        # Generous, because this example is about waiting rather than about the deadline that bounds the wait.
+        client.instance_variable_set(:@flush_timeout, 5)
         allow(client).to receive(:post_message) do
           entered_delivery << true
           release_delivery.pop
         end
-        client.instance_variable_get(:@queue) << 'in_flight_message'
+        queue << 'in_flight_message'
       end
 
       it 'does not return until that delivery has finished' do
@@ -107,20 +115,20 @@ describe Bigcommerce::Prometheus::Client do
 
     context 'when messages are queued' do
       before do
-        client.instance_variable_get(:@queue) << 'queued_message'
-        allow(client).to receive(:process_queue)
+        allow(client).to receive(:post_message)
+        queue << 'queued_message'
       end
 
       it 'delivers them on the calling thread' do
         client.flush!
-        expect(client).to have_received(:process_queue)
+        expect(client).to have_received(:post_message).with('queued_message', timeout: anything)
       end
     end
 
     context 'when the collector cannot be reached' do
       before do
-        client.instance_variable_get(:@queue) << 'queued_message'
-        allow(client).to receive(:process_queue).and_raise(StandardError, 'collector unreachable')
+        allow(client).to receive(:post_message).and_raise(StandardError, 'collector unreachable')
+        queue << 'queued_message'
       end
 
       it 'does not raise into the caller, since a lost metric must not fail the work that produced it' do
@@ -128,22 +136,112 @@ describe Bigcommerce::Prometheus::Client do
       end
     end
 
-    context 'with an unreachable collector' do
-      let(:http) { instance_double(Net::HTTP, :open_timeout= => nil, :read_timeout= => nil, start: nil) }
+    context 'when a delivery is in flight for longer than the flush timeout' do
+      let(:prometheus_logger) { instance_double(Logger, warn: nil) }
+      let(:lock_taken) { Queue.new }
+
+      before do
+        allow(Bigcommerce::Prometheus).to receive(:logger).and_return(prometheus_logger)
+        client.instance_variable_set(:@flush_timeout, 0.02)
+        queue << 'stranded_message'
+
+        @lock_holder = Thread.new do
+          delivery_mutex.lock
+          lock_taken << true
+          sleep
+        end
+        lock_taken.pop
+      end
+
+      after do
+        @lock_holder.kill
+        @lock_holder.join
+      end
+
+      it 'gives up, so an unhealthy collector cannot hold the caller up indefinitely' do
+        started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        client.flush!
+        expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at).to be < 1
+      end
+
+      it 'says how many observations it abandoned, since nothing else will report them' do
+        client.flush!
+        expect(prometheus_logger).to have_received(:warn).with(/abandoned 1 metric/)
+      end
+    end
+
+    context 'with a collector that does not answer' do
+      let(:http) do
+        instance_double(Net::HTTP, :open_timeout= => nil, :read_timeout= => nil, :write_timeout= => nil, start: nil)
+      end
 
       before do
         allow(Net::HTTP).to receive(:new).and_return(http)
-        client.instance_variable_get(:@queue) << 'queued_message'
-        client.flush!
+        queue << 'queued_message'
       end
 
-      it 'bounds the open timeout, so a caller cannot stall on connect' do
+      it 'bounds an inline flush on what is left of its budget, not on the background timeouts' do
+        client.instance_variable_set(:@flush_timeout, 0.02)
+        client.flush!
+        expect(http).to have_received(:read_timeout=).with(a_value_between(0, 0.02))
+      end
+
+      it 'bounds the background thread on the configured open timeout' do
+        client.process_queue
         expect(http).to have_received(:open_timeout=).with(Bigcommerce::Prometheus.client_open_timeout)
       end
 
-      it 'bounds the read timeout, so a caller cannot stall waiting for a response' do
+      it 'bounds the background thread on the configured read timeout' do
+        client.process_queue
         expect(http).to have_received(:read_timeout=).with(Bigcommerce::Prometheus.client_read_timeout)
       end
+
+      it 'bounds the write timeout, which Net::HTTP otherwise leaves at 60 seconds' do
+        client.process_queue
+        expect(http).to have_received(:write_timeout=).with(Bigcommerce::Prometheus.client_write_timeout)
+      end
+    end
+  end
+
+  describe '#flush! against a collector that stops answering' do
+    # A real socket that accepts and then never replies, which is what a saturated exporter looks like from here.
+    # Timeouts run against the clock, so a stub cannot show that the bound holds. Without it this example takes as
+    # long as the read timeout, five seconds when it was written.
+    let(:stalled_collector) { TCPServer.new('127.0.0.1', 0) }
+    let(:prometheus_logger) { instance_double(Logger, warn: nil) }
+
+    before do
+      allow(Bigcommerce::Prometheus).to receive_messages(enabled: true, logger: prometheus_logger)
+      @accepted = []
+      @acceptor = Thread.new { loop { @accepted << stalled_collector.accept } }
+
+      @original = %i[@host @port @flush_timeout].to_h { |name| [name, client.instance_variable_get(name)] }
+      client.instance_variable_set(:@host, '127.0.0.1')
+      client.instance_variable_set(:@port, stalled_collector.addr[1])
+      client.instance_variable_set(:@flush_timeout, 0.02)
+      client.reset_after_fork!
+      client.instance_variable_get(:@queue) << 'queued_message'
+    end
+
+    after do
+      @acceptor.kill
+      @accepted.each(&:close)
+      stalled_collector.close
+      @original.each { |name, value| client.instance_variable_set(name, value) }
+      client.reset_after_fork!
+    end
+
+    it 'gives up on the flush timeout rather than on the much longer read timeout' do
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      client.flush!
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+
+      expect(elapsed).to be < Bigcommerce::Prometheus.client_read_timeout
+    end
+
+    it 'says the observation was dropped, so an outage is not silent' do
+      client.flush!
+      expect(prometheus_logger).to have_received(:warn).with(/dropping a message/)
     end
   end
 

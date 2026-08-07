@@ -62,6 +62,12 @@ Cost is one request to the local collector per job that pushed something, and no
 nothing. Disable with `PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED=0` if a service would rather have the throughput and can
 accept the loss.
 
+A job is real work, and it should not wait on the metrics pipeline for long. Delivery is therefore bounded by
+`PROMETHEUS_CLIENT_FLUSH_TIMEOUT`, 20ms by default, covering the wait for the delivery lock as well as the requests
+themselves. An unhealthy collector costs a job that much and no more. Past the deadline the observations are abandoned
+and a warning is logged saying how many, which is the only signal you will get, since the metric that would have
+reported the outage is the one being lost.
+
 Note that this applies to metrics your application code pushes from inside a job. The per-job histograms below are
 recorded in the parent and never pay this cost.
 
@@ -117,6 +123,8 @@ After requiring the main file, you can further configure with:
 | client_thread_sleep | How often to sleep the worker thread that manages the client buffer (seconds) | `0.5` | `ENV['PROMETHEUS_CLIENT_THREAD_SLEEP']` |
 | client_open_timeout | Connect timeout when delivering to the collector (seconds) | `0.5` | `ENV['PROMETHEUS_CLIENT_OPEN_TIMEOUT']` |
 | client_read_timeout | Response timeout when delivering to the collector (seconds) | `1.0` | `ENV['PROMETHEUS_CLIENT_READ_TIMEOUT']` |
+| client_write_timeout | Send timeout when delivering to the collector (seconds) | `0.5` | `ENV['PROMETHEUS_CLIENT_WRITE_TIMEOUT']` |
+| client_flush_timeout | Total a synchronous flush will spend before abandoning what is queued (seconds) | `0.02` | `ENV['PROMETHEUS_CLIENT_FLUSH_TIMEOUT']` |
 | puma_collection_frequency | How often to poll puma collection metrics (seconds) | `30` | `ENV['PROMETHEUS_PUMA_COLLECTION_FREQUENCY']` |
 | server_host | The host to run the exporter on | `"0.0.0.0"` | `ENV['PROMETHEUS_SERVER_HOST']` |
 | server_port | The port to run the exporter on | `9394` | `ENV['PROMETHEUS_SERVER_PORT']` |
