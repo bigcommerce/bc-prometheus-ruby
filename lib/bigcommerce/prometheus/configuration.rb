@@ -43,6 +43,7 @@ module Bigcommerce
         # Off deliberately, not by oversight. Enabling it adds a synchronous request to every Resque job that records
         # a metric, so changing this default changes how long other people's jobs take. That is a breaking change and
         # wants a version bump to match, the way 0.4.0 handled moving the thread pool default from 20 to 3.
+        # Also accepts anything callable, resolved in the parent before every fork.
         resque_child_flush_enabled: ENV.fetch('PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED', 0).to_i.positive?,
 
         # Server configuration

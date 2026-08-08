@@ -76,11 +76,16 @@ module Bigcommerce
         ##
         # Deliver a forked child's own observations before Resque's `exit!` discards them.
         #
-        # Prepends rather than using a Resque hook because Resque has no in-child hook that runs after the job body.
-        # `Resque::Worker#perform` is that boundary.
+        # Two hooks, because the decision and the delivery happen in different processes. `before_fork` runs in the
+        # parent, so that is where `resque_child_flush_enabled` is resolved, and the child inherits the answer through
+        # the fork itself. `Resque::Worker#perform` is the only in-child boundary that runs after the job body, and it
+        # is a method rather than a hook, hence the prepend.
         #
-        # Idempotent, since a repeated prepend of an already-prepended module is a no-op but the guard keeps the
-        # intent explicit.
+        # Resolving per fork rather than once here is what lets a caller pass a callable and change its mind at
+        # runtime without a restart. Nothing in the child ever evaluates it.
+        #
+        # Idempotent. Resque appends `before_fork` hooks rather than replacing them, so a second call would otherwise
+        # register a second hook.
         #
         # Takes the client rather than reaching for the singleton at flush time, so that the queue drained here is the
         # one `install_fork_reset` cleared. A caller passing `client:` would otherwise get two different queues.
@@ -104,13 +109,54 @@ module Bigcommerce
 
           ChildFlush.client = client
           ::Resque::Worker.prepend(ChildFlush)
+          ::Resque.before_fork { |job| ChildFlush.enabled = resolve_child_flush(job) }
           @child_flush_installed = true
-          ::Bigcommerce::Prometheus.logger&.info(
-            '[bigcommerce-prometheus] resque child metric flush installed; a job that pushes metrics delivers them ' \
-            'before the child exits'
-          )
+          log_child_flush_installed
         end
         private_class_method :install_child_flush
+
+        ##
+        # Resolve whether this child should flush. Runs in the parent, before the fork.
+        #
+        # `resque_child_flush_enabled` is either a plain value or something callable. A callable is handed the
+        # `Resque::Job` when it accepts one, so a caller can decide per job as well as per process.
+        # `JobPayload.for(job).job_class` unwraps ActiveJob's payload if the caller wants the real class name.
+        #
+        # Never raises. This is a `before_fork` hook, so an exception here propagates into `perform_with_fork` and
+        # takes down job processing. A flaky feature flag must not be able to stop a worker, so a failure means no
+        # flush, which is the asynchronous behaviour callers had before this existed.
+        #
+        # @param [Resque::Job] job
+        # @return [Boolean]
+        #
+        def self.resolve_child_flush(job)
+          setting = ::Bigcommerce::Prometheus.resque_child_flush_enabled
+          return !!setting unless setting.respond_to?(:call)
+
+          # Procs answer `arity` themselves. An object with a `#call` method does not, and asking `method(:call).arity`
+          # of a proc reports `Proc#call(*args)` as -1, which would hand a job to a callable that takes none. So ask
+          # the object first and fall back to its method.
+          arity = setting.respond_to?(:arity) ? setting.arity : setting.method(:call).arity
+
+          !!(arity.zero? ? setting.call : setting.call(job))
+        rescue StandardError => e
+          ::Bigcommerce::Prometheus.logger&.warn(
+            "[bigcommerce-prometheus] resque child metric flush check failed, not flushing this job: #{e}"
+          )
+          false
+        end
+        private_class_method :resolve_child_flush
+
+        def self.log_child_flush_installed
+          dynamic = ::Bigcommerce::Prometheus.resque_child_flush_enabled.respond_to?(:call)
+          resolution = dynamic ? 'resolved in the parent before every fork' : 'enabled for every job'
+
+          ::Bigcommerce::Prometheus.logger&.info(
+            "[bigcommerce-prometheus] resque child metric flush installed, #{resolution}; a job that pushes metrics " \
+            'delivers them before the child exits'
+          )
+        end
+        private_class_method :log_child_flush_installed
       end
     end
   end

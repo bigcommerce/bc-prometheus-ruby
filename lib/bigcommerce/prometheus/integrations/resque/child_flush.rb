@@ -39,10 +39,25 @@ module Bigcommerce
         # It depends on the child having been given a clean queue at fork time; without that the child would
         # synchronously send the parent's backlog too, which is the latency problem this design exists to avoid.
         #
-        # Disable with PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED=0.
+        # Off unless asked for. `resque_child_flush_enabled` defaults from PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED and,
+        # like every setting here, an assignment overrides that default. Assign something callable and it is asked
+        # before every fork instead of once at boot. See `Integrations::Resque.resolve_child_flush`.
         #
         module ChildFlush
           class << self
+            ##
+            # Whether the child about to run should flush, decided by the parent in `Resque.before_fork` and inherited
+            # through the fork. Reading it here rather than baking the decision into the prepend is what lets a caller
+            # change its mind at runtime, and it keeps every evaluation in the long-lived parent where a feature flag
+            # client is safe to use.
+            #
+            # Defaults to false so that a child which somehow runs without the hook does nothing rather than something
+            # unasked for. In fork-per-job mode `before_fork` always runs first, so the default is not observed.
+            #
+            # @return [Boolean]
+            #
+            attr_accessor :enabled
+
             ##
             # The client to drain. The same object `ForkReset` was handed, so what is delivered here is the queue the
             # child was given at fork time.
@@ -66,6 +81,7 @@ module Bigcommerce
               client.flush! if client.respond_to?(:flush!)
             end
           end
+          self.enabled = false
 
           ##
           # Wraps `Resque::Worker#perform`, which is the in-child entry point when the worker forks per job. Guarded on
@@ -75,7 +91,7 @@ module Bigcommerce
           def perform(job, &block)
             super
           ensure
-            ChildFlush.flush if fork_per_job?
+            ChildFlush.flush if fork_per_job? && ChildFlush.enabled
           end
         end
       end
