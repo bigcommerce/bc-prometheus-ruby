@@ -6,21 +6,25 @@ orbs:
 
 defaults: &defaults
   notify_failure: false
+  checksumfile: Gemfile
 
 ruby_3_3_defaults: &ruby_3_3_defaults
   <<: *defaults
+  cache_key: gem-cache-ruby-3_3
   e:
     name: ruby/ruby
     ruby-version: '3.3'
 
 ruby_3_4_defaults: &ruby_3_4_defaults
   <<: *defaults
+  cache_key: gem-cache-ruby-3_4
   e:
     name: ruby/ruby
     ruby-version: '3.4'
 
 ruby_4_0_defaults: &ruby_4_0_defaults
   <<: *defaults
+  cache_key: gem-cache-ruby-4_0
   e:
     name: ruby/ruby
     ruby-version: '4.0'
