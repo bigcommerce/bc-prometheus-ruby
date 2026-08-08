@@ -31,6 +31,8 @@ module Bigcommerce
         client_thread_sleep: ENV.fetch('PROMETHEUS_CLIENT_THREAD_SLEEP', 0.5).to_f,
         client_open_timeout: ENV.fetch('PROMETHEUS_CLIENT_OPEN_TIMEOUT', 0.5).to_f,
         client_read_timeout: ENV.fetch('PROMETHEUS_CLIENT_READ_TIMEOUT', 1.0).to_f,
+        client_write_timeout: ENV.fetch('PROMETHEUS_CLIENT_WRITE_TIMEOUT', 0.5).to_f,
+        client_flush_timeout: ENV.fetch('PROMETHEUS_CLIENT_FLUSH_TIMEOUT', 0.02).to_f,
 
         # Integration configuration
         puma_collection_frequency: ENV.fetch('PROMETHEUS_PUMA_COLLECTION_FREQUENCY', 30).to_i,

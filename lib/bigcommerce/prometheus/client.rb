@@ -24,6 +24,12 @@ module Bigcommerce
       include Singleton
       include Loggable
 
+      # How often `flush!` retries the delivery lock while waiting for another thread to finish sending.
+      LOCK_POLL_SECONDS = 0.001
+
+      # Below this there is no point starting a request, so the remaining budget is spent reporting the drop instead.
+      MINIMUM_ATTEMPT_SECONDS = 0.001
+
       ##
       # @param [String] host
       # @param [Integer] port
@@ -44,6 +50,8 @@ module Bigcommerce
         @process_name = process_name || ::Bigcommerce::Prometheus.process_name
         @open_timeout = ::Bigcommerce::Prometheus.client_open_timeout
         @read_timeout = ::Bigcommerce::Prometheus.client_read_timeout
+        @write_timeout = ::Bigcommerce::Prometheus.client_write_timeout
+        @flush_timeout = ::Bigcommerce::Prometheus.client_flush_timeout
         @delivery_mutex = Mutex.new
       end
 
@@ -85,55 +93,27 @@ module Bigcommerce
       #
       # Serialised so that only one thread is ever delivering. Two callers reach here, the background worker thread and
       # `flush!` on the caller's own thread, and without the lock either could return while the other still had a
-      # message in flight. It also closes a hang: both threads can see a length of one, both call `pop`, and the loser
-      # blocks on an empty queue forever.
+      # message in flight.
       #
       def process_queue
-        @delivery_mutex.synchronize do
-          while @queue.length.to_i.positive?
-            begin
-              message = @queue.pop
-              post_message(message)
-            rescue StandardError => e
-              logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter is dropping a message to #{uri_path('/send-metrics')}: #{e}"
-              raise
-            end
-          end
-        end
+        @delivery_mutex.synchronize { drain }
       end
 
-      ##
-      # Deliver anything queued, on the calling thread, and return once it has been sent.
-      #
-      # `send_json` only queues; delivery happens on a background thread that wakes every `client_thread_sleep`
-      # seconds. A process that is about to exit does not get that far, so anything pushed shortly before exit is
-      # discarded with it. Callers that are about to exit should flush.
-      #
-      # Returns once everything is delivered, including anything the background thread had already taken off the queue
-      # and was part way through sending. An empty queue is not the same as an empty wire, so this deliberately does not
-      # short circuit on one: the message the worker thread popped a microsecond ago is exactly the one about to be lost.
-      #
-      # A caller that pushed nothing pays one uncontended lock acquire, since a process that never pushed never started
-      # a worker thread. Never raises: metric delivery must not take down the work that produced the metric.
-      #
+      # @return [Symbol] one of :empty, :success, :timeout, :error
       def flush!
-        process_queue
-      rescue StandardError => e
-        logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter failed to flush: #{e}"
+        outcome = attempt_flush
+        report_outcome(outcome)
+        outcome
       end
 
       ##
       # Discard the state a forked child inherited from its parent.
       #
-      # The client is a singleton, so `fork` hands the child a copy of the parent's outbound queue while leaving the
-      # thread that would drain it behind. Anything still queued in the parent therefore has to be re-sent by the child,
-      # one request each, before the child reaches its own observation — and a Resque child is torn down by `exit!` long
-      # before that finishes. Discarding the copy is safe: the parent still holds the originals and sends them on its
-      # own schedule.
+      # The client is a singleton, so `fork` hands the child a copy of the parent's outbound queue
+      # Anything still queued in the parent therefore has to be re-sent by the child,
       #
-      # Both mutexes are reset for a rarer case. If the fork lands while another thread holds one, the child inherits a
-      # locked mutex with no owner, and blocks forever the first time it needs it. For `@mutex` that is the first push,
-      # and for `@delivery_mutex` it is the first delivery.
+      # Both mutexes are reset for a rarer case. If the fork happens while another thread holds the mutex, the child inherits a
+      # locked mutex and can never claim it.
       #
       def reset_after_fork!
         @queue = Queue.new
@@ -147,21 +127,127 @@ module Bigcommerce
 
       private
 
+      # @return [Symbol]
+      def attempt_flush
+        deliver_before(monotonic_now + @flush_timeout)
+      rescue StandardError => e
+        report("Prometheus Exporter failed to flush: #{e}")
+        :error
+      end
+
+      ##
+      # Take the delivery lock, send what is queued, and give the lock back. Gives up rather than queueing behind a
+      # delivery that will not finish in time.
+      #
+      # @param [Float] deadline monotonic clock reading to stop by
+      # @return [Symbol]
+      #
+      def deliver_before(deadline)
+        return :timeout unless acquire_delivery_lock(deadline)
+
+        begin
+          drain(deadline)
+        ensure
+          @delivery_mutex.unlock
+        end
+      end
+
+      ##
+      # @param [Float] deadline
+      # @return [Boolean] whether the lock was taken
+      #
+      def acquire_delivery_lock(deadline)
+        until @delivery_mutex.try_lock
+          return false if monotonic_now >= deadline
+
+          sleep LOCK_POLL_SECONDS
+        end
+        true
+      end
+
+      ##
+      # @param [Float|NilClass] deadline monotonic clock reading to stop by, or nil to keep going until the queue is
+      #   empty. The background thread passes nil, since it holds nothing up by waiting.
+      #
+      def drain(deadline = nil)
+        sent = 0
+        while @queue.length.to_i.positive?
+          timeout = deadline && (deadline - monotonic_now)
+          return :timeout if timeout && timeout < MINIMUM_ATTEMPT_SECONDS
+
+          begin
+            post_message(@queue.pop, timeout: timeout)
+            sent += 1
+          rescue StandardError => e
+            report("dropping a message to #{uri_path('/send-metrics')}: #{e}")
+            raise
+          end
+        end
+        sent.zero? ? :empty : :success
+      end
+
       ##
       # Post a single message with bounded timeouts.
       #
-      # `Net::HTTP.post` defaults to a 60 second open timeout. That is survivable on the background thread and is not
-      # survivable inline in a job, where an unreachable exporter would stall every unit of work for a minute. The
-      # collector is normally on localhost, so the defaults here are short.
+      # `Net::HTTP` defaults every timeout to 60 seconds. That is ok on the background thread.
+      # However, inline in a job, an unhealthy collector would stall every unit of work.
+      # The collector is normally on localhost, so the defaults here are short
       #
       # @param [String] message
+      # @param [Float|NilClass] timeout overrides all three phases when given
       #
-      def post_message(message)
+      def post_message(message, timeout: nil)
         uri = uri_path('/send-metrics')
         http = ::Net::HTTP.new(uri.host, uri.port)
-        http.open_timeout = @open_timeout
-        http.read_timeout = @read_timeout
+        http.open_timeout = timeout || @open_timeout
+        http.read_timeout = timeout || @read_timeout
+        http.write_timeout = timeout || @write_timeout
         http.start { |connection| connection.post(uri.path, message) }
+      end
+
+      # @param [Symbol] outcome
+      def report_outcome(outcome)
+        return if %i[success empty error].include?(outcome)
+
+        undelivered = @queue.size
+        return report_abandoned(undelivered) if undelivered.positive?
+
+        # Nothing queued, and still not a success. The background thread had already taken the message off the queue
+        # and was sending it, which is why the lock could not be acquired. `@queue.size` cannot see that message, so
+        # counting the queue alone would report this as nothing lost, in the one case where something is.
+        report(
+          "gave up after #{flush_timeout_ms}ms waiting for an in-flight send to #{uri_path('/send-metrics')}; " \
+          'anything it was carrying is lost with this process'
+        )
+      end
+
+      ##
+      # @param [Integer] undelivered
+      #
+      def report_abandoned(undelivered)
+        report(
+          "abandoned #{undelivered} metric(s) after #{flush_timeout_ms}ms: " \
+          "#{uri_path('/send-metrics')} did not accept them in time"
+        )
+      end
+
+      # @return [Integer]
+      def flush_timeout_ms
+        (@flush_timeout * 1000).round
+      end
+
+      # @param [String] message
+      def report(message)
+        logger.warn "[bigcommerce-prometheus][#{@process_name}] #{message}"
+        $stdout.flush
+        $stderr.flush
+      rescue StandardError
+        nil
+      end
+
+      # @return [Float]
+      def monotonic_now
+        Process.clock_gettime(Process::CLOCK_MONOTONIC)
       end
     end
   end

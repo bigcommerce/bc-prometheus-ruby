@@ -74,6 +74,24 @@ critical path. A job that records one observation pays for one request; a job th
 That default is a deliberate position rather than caution waiting to be undone. Turning it on for everyone would change
 how long other people's jobs take, which is a breaking change and wants a version bump to match.
 
+A job is real work, and it should not wait on the metrics pipeline for long. Delivery is therefore bounded by
+`PROMETHEUS_CLIENT_FLUSH_TIMEOUT`, 20ms by default, covering the wait for the delivery lock as well as the requests
+themselves. An unhealthy collector costs a job that much and no more. Past the deadline the observations are abandoned
+and a warning is logged, which is the only signal you will get, since the metric that would have reported the outage is
+the one being lost.
+
+That budget is for the whole flush rather than for each request, and each queued observation is a request of its own.
+So a job recording one observation has the full 20ms for it, and a job recording ten shares the same 20ms between ten.
+The more a job records, the likelier it is to lose the tail of what it recorded. Raise
+`PROMETHEUS_CLIENT_FLUSH_TIMEOUT` if your jobs record several metrics each and you would rather have them than the
+latency.
+
+`flush!` returns `:empty`, `:success`, `:timeout` or `:error` if you want to act on the result yourself. A timeout says
+either that the deadline expired part way through sending, in which case the warning says how many observations were
+abandoned, or that the delivery lock could not be taken at all. The second case leaves the queue empty, because the
+background thread had already taken the message it was sending, so the warning names the in-flight request instead of a
+count.
+
 Note that this applies to metrics your application code pushes from inside a job. The per-job histograms below are
 recorded in the parent and never pay this cost.
 
@@ -113,6 +131,8 @@ After requiring the main file, you can further configure with:
 | client_thread_sleep | How often to sleep the worker thread that manages the client buffer (seconds) | `0.5` | `ENV['PROMETHEUS_CLIENT_THREAD_SLEEP']` |
 | client_open_timeout | Connect timeout when delivering to the collector (seconds) | `0.5` | `ENV['PROMETHEUS_CLIENT_OPEN_TIMEOUT']` |
 | client_read_timeout | Response timeout when delivering to the collector (seconds) | `1.0` | `ENV['PROMETHEUS_CLIENT_READ_TIMEOUT']` |
+| client_write_timeout | Send timeout when delivering to the collector (seconds) | `0.5` | `ENV['PROMETHEUS_CLIENT_WRITE_TIMEOUT']` |
+| client_flush_timeout | Total a synchronous flush will spend before abandoning what is queued (seconds) | `0.02` | `ENV['PROMETHEUS_CLIENT_FLUSH_TIMEOUT']` |
 | puma_collection_frequency | How often to poll puma collection metrics (seconds) | `30` | `ENV['PROMETHEUS_PUMA_COLLECTION_FREQUENCY']` |
 | server_host | The host to run the exporter on | `"0.0.0.0"` | `ENV['PROMETHEUS_SERVER_HOST']` |
 | server_port | The port to run the exporter on | `9394` | `ENV['PROMETHEUS_SERVER_PORT']` |

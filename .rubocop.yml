@@ -20,6 +20,11 @@ Lint/AmbiguousOperator:
 Layout/LineLength:
   Enabled: false
 
+# Client carries the delivery path: the queue, the lock, the timeouts and the reporting. Cohesive rather than long,
+# and splitting it would mean handing a collaborator most of the client's state.
+Metrics/ClassLength:
+  Max: 130
+
 Metrics/MethodLength:
   Max: 20
 
