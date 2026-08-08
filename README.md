@@ -56,7 +56,8 @@ own message. This costs nothing and needs no configuration. `Worker#perform` is 
 the reset happens before all of them, including any of your own that record metrics.
 
 **Opt in:** the child can also deliver its own queue on the calling thread before the job returns, by wrapping
-`Resque::Worker#perform`.
+`Resque::Worker#perform`. Delivery is serialised against the background thread, so a request already in progress
+finishes before the child exits rather than being destroyed with it.
 
 ```bash
 PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED=1
