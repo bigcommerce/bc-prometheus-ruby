@@ -42,6 +42,8 @@ module Bigcommerce
         )
         PrometheusExporter::Client.default = self
         @process_name = process_name || ::Bigcommerce::Prometheus.process_name
+        @open_timeout = ::Bigcommerce::Prometheus.client_open_timeout
+        @read_timeout = ::Bigcommerce::Prometheus.client_read_timeout
       end
 
       ##
@@ -84,12 +86,30 @@ module Bigcommerce
         while @queue.length.to_i.positive?
           begin
             message = @queue.pop
-            Net::HTTP.post(uri_path('/send-metrics'), message)
+            post_message(message)
           rescue StandardError => e
             logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter is dropping a message to #{uri_path('/send-metrics')}: #{e}"
             raise
           end
         end
+      end
+
+      ##
+      # Deliver anything queued, on the calling thread, and return once it has been sent.
+      #
+      # `send_json` only queues; delivery happens on a background thread that wakes every `client_thread_sleep`
+      # seconds. A process that is about to exit does not get that far, so anything pushed shortly before exit is
+      # discarded with it. Callers that are about to exit should flush.
+      #
+      # A no-op when nothing is queued, so callers that never push pay nothing. Never raises: metric delivery must not
+      # take down the work that produced the metric.
+      #
+      def flush!
+        return if @queue.empty?
+
+        process_queue
+      rescue StandardError => e
+        logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter failed to flush: #{e}"
       end
 
       ##
@@ -111,6 +131,25 @@ module Bigcommerce
         @socket = nil
         @socket_started = nil
         @socket_pid = nil
+      end
+
+      private
+
+      ##
+      # Post a single message with bounded timeouts.
+      #
+      # `Net::HTTP.post` defaults to a 60 second open timeout. That is survivable on the background thread and is not
+      # survivable inline in a job, where an unreachable exporter would stall every unit of work for a minute. The
+      # collector is normally on localhost, so the defaults here are short.
+      #
+      # @param [String] message
+      #
+      def post_message(message)
+        uri = uri_path('/send-metrics')
+        http = ::Net::HTTP.new(uri.host, uri.port)
+        http.open_timeout = @open_timeout
+        http.read_timeout = @read_timeout
+        http.start { |connection| connection.post(uri.path, message) }
       end
     end
   end

@@ -56,6 +56,67 @@ describe Bigcommerce::Prometheus::Client do
     end
   end
 
+  describe '#flush!' do
+    # Populated directly rather than through #send, which starts the background thread and would race the assertion.
+    let(:queue) { client.instance_variable_get(:@queue) }
+
+    before do
+      allow(Bigcommerce::Prometheus).to receive(:enabled).and_return(true)
+      client.reset_after_fork!
+    end
+
+    after { client.reset_after_fork! }
+
+    context 'when nothing is queued' do
+      it 'delivers nothing, so a caller that never pushed pays nothing' do
+        allow(client).to receive(:process_queue)
+        client.flush!
+        expect(client).not_to have_received(:process_queue)
+      end
+    end
+
+    context 'when messages are queued' do
+      before do
+        client.instance_variable_get(:@queue) << 'queued_message'
+        allow(client).to receive(:process_queue)
+      end
+
+      it 'delivers them on the calling thread' do
+        client.flush!
+        expect(client).to have_received(:process_queue)
+      end
+    end
+
+    context 'when the collector cannot be reached' do
+      before do
+        client.instance_variable_get(:@queue) << 'queued_message'
+        allow(client).to receive(:process_queue).and_raise(StandardError, 'collector unreachable')
+      end
+
+      it 'does not raise into the caller, since a lost metric must not fail the work that produced it' do
+        expect { client.flush! }.not_to raise_error
+      end
+    end
+
+    context 'with an unreachable collector' do
+      let(:http) { instance_double(Net::HTTP, :open_timeout= => nil, :read_timeout= => nil, start: nil) }
+
+      before do
+        allow(Net::HTTP).to receive(:new).and_return(http)
+        client.instance_variable_get(:@queue) << 'queued_message'
+        client.flush!
+      end
+
+      it 'bounds the open timeout, so a caller cannot stall on connect' do
+        expect(http).to have_received(:open_timeout=).with(Bigcommerce::Prometheus.client_open_timeout)
+      end
+
+      it 'bounds the read timeout, so a caller cannot stall waiting for a response' do
+        expect(http).to have_received(:read_timeout=).with(Bigcommerce::Prometheus.client_read_timeout)
+      end
+    end
+  end
+
   describe '#reset_after_fork!' do
     before do
       allow(Bigcommerce::Prometheus).to receive(:enabled).and_return(true)

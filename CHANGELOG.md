@@ -3,6 +3,7 @@ Changelog for the bc-prometheus-ruby gem.
 ## Pending Release
 
 - Reset the Prometheus client in forked Resque children, by wrapping `Resque::Worker#perform`. A child previously inherited a copy of the parent's undrained outbound queue and had to re-send every message in it before reaching its own, which Resque's `exit!` cut short. Observations pushed from inside a job were dropped as a result. `Worker#perform` is what runs the `after_fork` hooks, so the reset lands ahead of every one of them: an application hook that records a metric and was registered before this integration started would otherwise have had its observation enqueued and then discarded. The reset only runs in a forked child, identified by a changed pid, so a non-forking worker keeps the queue it is still responsible for sending.
+- Optionally deliver a forked Resque child's own queued metrics before the child exits, by wrapping `Resque::Worker#perform`. Pushing only queues, and `exit!` does not wait for the thread that would deliver it, so metrics recorded inside a job were unreliable regardless of the above. Drains whichever client `Integrations::Resque.start` was given, so the queue delivered is the one the reset cleared. **Off by default**, because it costs one request per observation a job records, each queued message being sent separately, and upgrading the gem should not change how long anyone's jobs take. Enable with `PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED=1`. Jobs that record nothing pay nothing either way.
 
 ## 0.9.0
 
