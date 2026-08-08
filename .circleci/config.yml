@@ -55,6 +55,22 @@ workflows:
           <<: *ruby_3_4_defaults
           name: ruby-3_4-rspec_unit
           db: false
+      # Forks real Resque children against a redis, so it is opt-in and excluded from the run above. The ruby executor
+      # already provides redis on localhost:6379, which is where the specs look by default.
+      #
+      # One ruby version is enough: what it exercises is fork and HTTP behaviour rather than anything version
+      # specific, and forking a few hundred children per version buys nothing. 3.4 matches the consuming service.
+      - ruby/rspec-unit:
+          <<: *ruby_3_4_defaults
+          name: ruby-3_4-rspec_fork_integration
+          db: false
+          code-climate: false
+          report-code-coverage: false
+          additional_args: "spec/integration"
+          pre-exec-hooks:
+            - run:
+                name: Enable the fork integration specs
+                command: echo 'export FORK_INTEGRATION=1' >> "$BASH_ENV"
   ruby_4_0:
     jobs:
       - ruby/bundle-audit:
