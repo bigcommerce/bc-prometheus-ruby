@@ -1,5 +1,9 @@
 Changelog for the bc-prometheus-ruby gem.
 
+## Pending Release
+
+- Reset the Prometheus client in forked Resque children, by wrapping `Resque::Worker#perform`. A child previously inherited a copy of the parent's undrained outbound queue and had to re-send every message in it before reaching its own, which Resque's `exit!` cut short. Observations pushed from inside a job were dropped as a result. `Worker#perform` is what runs the `after_fork` hooks, so the reset lands ahead of every one of them: an application hook that records a metric and was registered before this integration started would otherwise have had its observation enqueued and then discarded. The reset only runs in a forked child, identified by a changed pid, so a non-forking worker keeps the queue it is still responsible for sending.
+
 ## 0.9.0
 
 - Add `Bigcommerce::Prometheus::Instrumentors::Protorabbit` so protorabbit (RabbitMQ protobuf consumer) processes run an embedded Prometheus exporter server, fixing dropped/refused metric pushes (`Errno::ECONNREFUSED` on `/send-metrics`) from those processes.

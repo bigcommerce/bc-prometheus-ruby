@@ -55,4 +55,64 @@ describe Bigcommerce::Prometheus::Client do
       end
     end
   end
+
+  describe '#reset_after_fork!' do
+    before do
+      allow(Bigcommerce::Prometheus).to receive(:enabled).and_return(true)
+    end
+
+    after { client.reset_after_fork! }
+
+    it 'discards the messages a forked child inherited from its parent' do
+      client.send('inherited_message')
+      expect { client.reset_after_fork! }.to change { client.instance_variable_get(:@queue).size }.to 0
+    end
+
+    it 'replaces the queue rather than draining it, so the child never sends the parent messages' do
+      original = client.instance_variable_get(:@queue)
+      client.reset_after_fork!
+      expect(client.instance_variable_get(:@queue)).not_to be original
+    end
+
+    it 'clears the inherited worker thread reference, since threads do not survive a fork' do
+      client.send('inherited_message')
+      client.reset_after_fork!
+      expect(client.instance_variable_get(:@worker_thread)).to be_nil
+    end
+
+    it 'replaces a mutex that may have been held when the fork landed' do
+      original = client.instance_variable_get(:@mutex)
+      original.lock
+      client.reset_after_fork!
+      expect(client.instance_variable_get(:@mutex)).not_to be original
+    end
+
+    it 'leaves the replacement mutex unlocked, so the first push in the child cannot deadlock' do
+      client.instance_variable_get(:@mutex).lock
+      client.reset_after_fork!
+      expect(client.instance_variable_get(:@mutex)).not_to be_locked
+    end
+
+    context 'with socket state inherited from the parent' do
+      before do
+        client.instance_variable_set(:@socket, :inherited_socket)
+        client.instance_variable_set(:@socket_started, Time.now.to_f)
+        client.instance_variable_set(:@socket_pid, Process.pid)
+
+        client.reset_after_fork!
+      end
+
+      it 'clears the socket' do
+        expect(client.instance_variable_get(:@socket)).to be_nil
+      end
+
+      it 'clears the socket start time' do
+        expect(client.instance_variable_get(:@socket_started)).to be_nil
+      end
+
+      it 'clears the socket pid' do
+        expect(client.instance_variable_get(:@socket_pid)).to be_nil
+      end
+    end
+  end
 end

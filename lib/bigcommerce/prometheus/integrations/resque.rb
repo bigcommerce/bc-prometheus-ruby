@@ -26,18 +26,46 @@ module Bigcommerce
         # Start the resque integration
         #
         def self.start(client: nil)
+          resque_client = client || ::Bigcommerce::Prometheus.client
+
+          # Installed ahead of the collectors. It is the safety net for every observation pushed from a forked child,
+          # so it must not depend on any of them starting successfully.
+          install_fork_reset(resque_client)
+
           ::PrometheusExporter::Instrumentation::Process.start(
-            client: client || ::Bigcommerce::Prometheus.client,
+            client: resque_client,
             type: ::Bigcommerce::Prometheus.resque_process_label
           )
           ::Bigcommerce::Prometheus::Collectors::Resque.start(
-            client: client || ::Bigcommerce::Prometheus.client,
+            client: resque_client,
             frequency: ::Bigcommerce::Prometheus.resque_collection_frequency
           )
           ::Bigcommerce::Prometheus::Integrations::Resque::JobMetrics.start(
-            client: client || ::Bigcommerce::Prometheus.client
+            client: resque_client
           )
         end
+
+        ##
+        # Hand each forked child a clean client instead of a copy of whatever the parent had not yet drained.
+        #
+        # Installed whatever the per-job flush setting is: Collectors::Resque pushes from the parent every 30 seconds,
+        # so a child can inherit queued messages either way. See `ForkReset` for why this wraps `Worker#perform`
+        # instead of registering an after_fork hook.
+        #
+        # The pid is recorded here because this runs in the worker parent, which makes it the reading every forked
+        # child differs from.
+        #
+        # Idempotent. `Module#prepend` ignores a module already in the ancestors, and a second call assigns the same
+        # two values.
+        #
+        # @param [PrometheusExporter::Client] client
+        #
+        def self.install_fork_reset(client)
+          ForkReset.client = client
+          ForkReset.installed_in_pid = Process.pid
+          ::Resque::Worker.prepend(ForkReset)
+        end
+        private_class_method :install_fork_reset
       end
     end
   end
