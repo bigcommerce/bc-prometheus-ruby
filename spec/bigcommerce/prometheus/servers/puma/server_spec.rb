@@ -1,12 +1,12 @@
 require 'spec_helper'
 
 describe Bigcommerce::Prometheus::Servers::Puma::Server do
-  let(:server) { @server = described_class.new(port: default_port) }
+  let(:server) { described_class.new(port: default_port) }
   let(:default_port) { 0 }
   before do
     Bigcommerce::Prometheus.reset
   end
-  after { @server&.binder&.close }
+  after { server.binder.close }
 
   context 'when the server is initialized' do
     it 'has a valid rack app' do
