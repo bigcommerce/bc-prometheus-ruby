@@ -38,7 +38,11 @@ describe Bigcommerce::Prometheus::Servers::Puma::Server do
   end
 
   context 'when the default port is configured' do
-    let(:server_port) { 9000 + rand(100) }
+    # Asks the kernel for a free port, then releases it so the server can claim it. Port 0 is not an option here,
+    # since the example asserts on the configured port.
+    let(:server_port) do
+      ::TCPServer.open(::Bigcommerce::Prometheus.server_host, 0) { |probe| probe.addr[1] }
+    end
     let(:default_port) { nil }
 
     before do
