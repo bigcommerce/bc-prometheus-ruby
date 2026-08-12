@@ -1,11 +1,14 @@
 require 'spec_helper'
+require 'socket'
 
 describe Bigcommerce::Prometheus::Servers::Puma::Server do
-  let(:server) { described_class.new(port: default_port) }
-  let(:default_port) { 9800 + rand(100) }
+  let(:server) { described_class.new(port: default_port).tap { |s| started_servers << s } }
+  let(:started_servers) { [] }
+  let(:default_port) { 0 }
   before do
     Bigcommerce::Prometheus.reset
   end
+  after { started_servers.each { |s| s.binder.close } }
 
   context 'when the server is initialized' do
     it 'has a valid rack app' do
@@ -35,7 +38,11 @@ describe Bigcommerce::Prometheus::Servers::Puma::Server do
   end
 
   context 'when the default port is configured' do
-    let(:server_port) { 9000 + rand(100) }
+    # Asks the kernel for a free port, then releases it so the server can claim it. Port 0 is not an option here,
+    # since the example asserts on the configured port.
+    let(:server_port) do
+      ::TCPServer.open(::Bigcommerce::Prometheus.server_host, 0) { |probe| probe.addr[1] }
+    end
     let(:default_port) { nil }
 
     before do
