@@ -22,7 +22,7 @@ module Bigcommerce
       # Instrumentors for protorabbit process
       #
       # protorabbit has no built-in tracer/middleware hook (unlike Hutch), so this instrumentor only
-      # starts the embedded exporter server and registers collectors - it takes no `app:` argument.
+      # starts the embedded exporter server and registers collectors.
       #
       class Protorabbit
         include Bigcommerce::Prometheus::Loggable

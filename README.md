@@ -67,11 +67,6 @@ require 'bigcommerce/prometheus'
 Bigcommerce::Prometheus::Instrumentors::Protorabbit.new.start
 ```
 
-Note: protorabbit has no built-in tracer/middleware hook (unlike Hutch), so this instrumentor
-only starts the embedded exporter server and registers the generic ActiveRecord collector plus
-any custom collectors you configure via `protorabbit_collectors`/`protorabbit_type_collectors`.
-This unblocks any metrics already being pushed from within message processing (e.g. gRPC client
-interceptor metrics) that were previously refused because no exporter server was listening.
 
 ## Configuration
 
