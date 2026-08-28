@@ -49,6 +49,8 @@ module Bigcommerce
         collector_collection_frequency: ENV.fetch('PROMETHEUS_DEFAULT_COLLECTOR_COLLECTION_FREQUENCY_SEC', 15).to_i,
         hutch_collectors: [],
         hutch_type_collectors: [],
+        protorabbit_collectors: [],
+        protorabbit_type_collectors: [],
         resque_collectors: [],
         resque_type_collectors: [],
         web_collectors: [],
