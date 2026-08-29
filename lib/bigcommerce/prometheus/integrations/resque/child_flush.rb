@@ -15,24 +15,29 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-source 'https://rubygems.org'
+module Bigcommerce
+  module Prometheus
+    module Integrations
+      class Resque
+        ##
+        # Deliver a forked child's observations before Resque tears it down, by waiting on the client's background
+        # drain thread.
+        #
+        # This is not a proposal. It reconstructs the approach taken by bigpay PR #10597, which shipped and was
+        # reverted, so that the fork delivery specs can be run against it.
+        #
+        module ChildFlush
+          # bigpay passed 2 seconds. The value is an upper bound, not a cost: `stop` returns as soon as the queue is
+          # observed empty.
+          WAIT_TIMEOUT_SECONDS = 2
 
-gem 'bundler-audit', '>= 0.6'
-gem 'pry', '>= 0.12'
-gem 'rspec', '>= 3.8'
-gem 'rspec_junit_formatter', '>= 0.4'
-gem 'rubocop', '>= 1.0'
-gem 'rubocop-performance', '>= 1.5'
-gem 'rubocop-rspec'
-gem 'simplecov', '>= 0.16'
-
-# Resque is an optional integration, but its fork-per-job lifecycle is the one thing the client has to survive, so the
-# integration needs real coverage rather than stubs.
-#
-# Resque depends on sinatra for its web UI with a loose `>= 0.9.2`. There is no Gemfile.lock in this repo, so CI
-# resolves cold and the resolver is free to pick an old sinatra that caps `rack < 3`, which conflicts with the
-# gemspec's `rack >= 3.0`. Pinning sinatra forward keeps the resolution rack-3 compatible.
-gem 'resque', '>= 2.0'
-gem 'sinatra', '>= 4.0'
-
-gemspec
+          def perform(job, &block)
+            super
+          ensure
+            ::Bigcommerce::Prometheus.client.stop(wait_timeout_seconds: WAIT_TIMEOUT_SECONDS) if fork_per_job?
+          end
+        end
+      end
+    end
+  end
+end

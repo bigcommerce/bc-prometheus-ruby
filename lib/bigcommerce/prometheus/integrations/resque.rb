@@ -26,6 +26,7 @@ module Bigcommerce
         # Start the resque integration
         #
         def self.start(client: nil)
+          install_child_flush
           ::PrometheusExporter::Instrumentation::Process.start(
             client: client || ::Bigcommerce::Prometheus.client,
             type: ::Bigcommerce::Prometheus.resque_process_label
@@ -38,6 +39,14 @@ module Bigcommerce
             client: client || ::Bigcommerce::Prometheus.client
           )
         end
+
+        def self.install_child_flush
+          return if @child_flush_installed
+
+          ::Resque::Worker.prepend(ChildFlush)
+          @child_flush_installed = true
+        end
+        private_class_method :install_child_flush
       end
     end
   end
