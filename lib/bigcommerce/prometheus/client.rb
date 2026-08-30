@@ -20,15 +20,12 @@ module Bigcommerce
     ##
     # Client implementation for Prometheus
     #
+    # Queueing and registration are the superclass's. Everything about getting a queued message to the collector
+    # belongs to `Delivery`, which this hands its own queue to and rebuilds whenever that queue is replaced.
+    #
     class Client < ::PrometheusExporter::Client
       include Singleton
       include Loggable
-
-      # How often `flush!` retries the delivery lock while waiting for another thread to finish sending.
-      LOCK_POLL_SECONDS = 0.001
-
-      # Below this there is no point starting a request, so the remaining budget is spent reporting the drop instead.
-      MINIMUM_ATTEMPT_SECONDS = 0.001
 
       ##
       # @param [String] host
@@ -48,11 +45,7 @@ module Bigcommerce
         )
         PrometheusExporter::Client.default = self
         @process_name = process_name || ::Bigcommerce::Prometheus.process_name
-        @open_timeout = ::Bigcommerce::Prometheus.client_open_timeout
-        @read_timeout = ::Bigcommerce::Prometheus.client_read_timeout
-        @write_timeout = ::Bigcommerce::Prometheus.client_write_timeout
-        @flush_timeout = ::Bigcommerce::Prometheus.client_flush_timeout
-        @delivery_mutex = Mutex.new
+        @delivery = build_delivery
       end
 
       ##
@@ -73,14 +66,6 @@ module Bigcommerce
       end
 
       ##
-      # @param [String] path
-      # @return [Module<URI>]
-      #
-      def uri_path(path)
-        URI("http://#{@host}:#{@port}#{path}")
-      end
-
-      ##
       # @param [String] str
       def send(str)
         return unless Bigcommerce::Prometheus.enabled
@@ -91,19 +76,20 @@ module Bigcommerce
       ##
       # Process the current queue and flush to the collector
       #
-      # Serialised so that only one thread is ever delivering. Two callers reach here, the background worker thread and
-      # `flush!` on the caller's own thread, and without the lock either could return while the other still had a
-      # message in flight.
+      # Overridden because the superclass streams onto a long-lived socket, which this gem stopped doing. Called by
+      # the background worker thread only.
       #
       def process_queue
-        @delivery_mutex.synchronize { drain }
+        @delivery.process_queue
       end
 
+      ##
+      # Deliver what is queued before the caller stops being able to.
+      #
       # @return [Symbol] one of :empty, :success, :timeout, :error
+      #
       def flush!
-        outcome = attempt_flush
-        report_outcome(outcome)
-        outcome
+        @delivery.flush!
       end
 
       ##
@@ -112,147 +98,43 @@ module Bigcommerce
       # The client is a singleton, so `fork` hands the child a copy of the parent's outbound queue
       # Anything still queued in the parent therefore has to be re-sent by the child,
       #
-      # Both mutexes are reset for a rarer case. If the fork happens while another thread holds the mutex, the child inherits a
+      # The mutex is reset for a rarer case. If the fork happens while another thread holds the mutex, the child inherits a
       # locked mutex and can never claim it.
+      #
+      # `Delivery` is rebuilt last, and for both reasons at once. It has to be given the new queue, and its own
+      # delivery lock may have been held by a thread that did not survive the fork.
       #
       def reset_after_fork!
         @queue = Queue.new
         @worker_thread = nil
         @mutex = Mutex.new
-        @delivery_mutex = Mutex.new
         @socket = nil
         @socket_started = nil
         @socket_pid = nil
+        @delivery = build_delivery
       end
 
       private
 
-      # @return [Symbol]
-      def attempt_flush
-        deliver_before(monotonic_now + @flush_timeout)
-      rescue StandardError => e
-        report("Prometheus Exporter failed to flush: #{e}")
-        :error
-      end
-
       ##
-      # Take the delivery lock, send what is queued, and give the lock back. Gives up rather than queueing behind a
-      # delivery that will not finish in time.
+      # Whatever is queued now, and the settings to deliver it under.
       #
-      # @param [Float] deadline monotonic clock reading to stop by
-      # @return [Symbol]
+      # Built rather than assigned once, so `reset_after_fork!` can replace it wholesale. That is how a child stops
+      # sharing a queue, and a delivery lock, with the parent it forked from.
       #
-      def deliver_before(deadline)
-        return :timeout unless acquire_delivery_lock(deadline)
-
-        begin
-          drain(deadline)
-        ensure
-          @delivery_mutex.unlock
-        end
-      end
-
-      ##
-      # @param [Float] deadline
-      # @return [Boolean] whether the lock was taken
+      # @return [Bigcommerce::Prometheus::Delivery]
       #
-      def acquire_delivery_lock(deadline)
-        until @delivery_mutex.try_lock
-          return false if monotonic_now >= deadline
-
-          sleep LOCK_POLL_SECONDS
-        end
-        true
-      end
-
-      ##
-      # @param [Float|NilClass] deadline monotonic clock reading to stop by, or nil to keep going until the queue is
-      #   empty. The background thread passes nil, since it holds nothing up by waiting.
-      #
-      def drain(deadline = nil)
-        sent = 0
-        while @queue.length.to_i.positive?
-          timeout = deadline && (deadline - monotonic_now)
-          return :timeout if timeout && timeout < MINIMUM_ATTEMPT_SECONDS
-
-          begin
-            post_message(@queue.pop, timeout: timeout)
-            sent += 1
-          rescue StandardError => e
-            report("dropping a message to #{uri_path('/send-metrics')}: #{e}")
-            raise
-          end
-        end
-        sent.zero? ? :empty : :success
-      end
-
-      ##
-      # Post a single message with bounded timeouts.
-      #
-      # `Net::HTTP` defaults every timeout to 60 seconds. That is ok on the background thread.
-      # However, inline in a job, an unhealthy collector would stall every unit of work.
-      # The collector is normally on localhost, so the defaults here are short
-      #
-      # @param [String] message
-      # @param [Float|NilClass] timeout overrides all three phases when given
-      #
-      def post_message(message, timeout: nil)
-        uri = uri_path('/send-metrics')
-        http = ::Net::HTTP.new(uri.host, uri.port)
-        http.open_timeout = timeout || @open_timeout
-        http.read_timeout = timeout || @read_timeout
-        http.write_timeout = timeout || @write_timeout
-        http.start { |connection| connection.post(uri.path, message) }
-      end
-
-      # @param [Symbol] outcome
-      def report_outcome(outcome)
-        return if %i[success empty].include?(outcome)
-
-        undelivered = @queue.size
-        return report_abandoned(undelivered) if undelivered.positive?
-
-        # `drain` reports the one message it was carrying when it failed, and re-raises. Anything still behind that
-        # message is reported above, since it is just as lost. There is nothing left to say once the queue is empty:
-        # nothing was in flight, so the message below would be a false claim.
-        return if outcome == :error
-
-        # Nothing queued, and still not a success. The background thread had already taken the message off the queue
-        # and was sending it, which is why the lock could not be acquired. `@queue.size` cannot see that message, so
-        # counting the queue alone would report this as nothing lost, in the one case where something is.
-        report(
-          "gave up after #{flush_timeout_ms}ms waiting for an in-flight send to #{uri_path('/send-metrics')}; " \
-          'anything it was carrying is lost with this process'
+      def build_delivery
+        Delivery.new(
+          queue: @queue,
+          host: @host,
+          port: @port,
+          open_timeout: ::Bigcommerce::Prometheus.client_open_timeout,
+          read_timeout: ::Bigcommerce::Prometheus.client_read_timeout,
+          write_timeout: ::Bigcommerce::Prometheus.client_write_timeout,
+          flush_timeout: ::Bigcommerce::Prometheus.client_flush_timeout,
+          process_name: @process_name
         )
-      end
-
-      ##
-      # @param [Integer] undelivered
-      #
-      def report_abandoned(undelivered)
-        report(
-          "abandoned #{undelivered} metric(s) after #{flush_timeout_ms}ms: " \
-          "#{uri_path('/send-metrics')} did not accept them in time"
-        )
-      end
-
-      # @return [Integer]
-      def flush_timeout_ms
-        (@flush_timeout * 1000).round
-      end
-
-      # @param [String] message
-      def report(message)
-        logger.warn "[bigcommerce-prometheus][#{@process_name}] #{message}"
-        $stdout.flush
-        $stderr.flush
-      rescue StandardError
-        nil
-      end
-
-      # @return [Float]
-      def monotonic_now
-        Process.clock_gettime(Process::CLOCK_MONOTONIC)
       end
     end
   end

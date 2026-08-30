@@ -32,7 +32,7 @@ module Bigcommerce
         # inside its own jobs, which the gem cannot move anywhere else.
         #
         # Cost is one request to the local collector per observation still queued, and nothing at all when the job
-        # pushed no metrics. `Client#drain` posts each message separately, which is how this gem has delivered since it
+        # pushed no metrics. `Delivery#drain` posts each message separately, which is how this gem has delivered since it
         # stopped using the upstream chunked socket; the flush does not add requests, it moves ones that already
         # existed onto the job's critical path.
         #
