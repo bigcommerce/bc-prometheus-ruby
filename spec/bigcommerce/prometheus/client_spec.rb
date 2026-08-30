@@ -167,6 +167,24 @@ describe Bigcommerce::Prometheus::Client do
       end
     end
 
+    # The regression this exists to catch. `drain` reports only the message it was carrying when it failed, then
+    # re-raises, leaving everything behind that message on the queue. Excluding `:error` from reporting entirely meant
+    # those were destroyed by the child's `exit!` in silence, which is the one thing this reporting exists to prevent.
+    context 'when a send fails part way through, leaving messages behind it on the queue' do
+      let(:prometheus_logger) { instance_double(Logger, warn: nil) }
+
+      before do
+        allow(Bigcommerce::Prometheus).to receive(:logger).and_return(prometheus_logger)
+        allow(client).to receive(:post_message).and_raise(StandardError, 'collector unreachable')
+        3.times { |i| queue << "queued_message_#{i}" }
+      end
+
+      it 'counts the ones it never got to, not just the one that failed' do
+        client.flush!
+        expect(prometheus_logger).to have_received(:warn).with(/abandoned 2 metric/)
+      end
+    end
+
     context 'when a delivery is in flight for longer than the flush timeout' do
       let(:prometheus_logger) { instance_double(Logger, warn: nil) }
       let(:lock_taken) { Queue.new }

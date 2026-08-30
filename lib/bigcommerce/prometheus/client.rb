@@ -207,10 +207,15 @@ module Bigcommerce
 
       # @param [Symbol] outcome
       def report_outcome(outcome)
-        return if %i[success empty error].include?(outcome)
+        return if %i[success empty].include?(outcome)
 
         undelivered = @queue.size
         return report_abandoned(undelivered) if undelivered.positive?
+
+        # `drain` reports the one message it was carrying when it failed, and re-raises. Anything still behind that
+        # message is reported above, since it is just as lost. There is nothing left to say once the queue is empty:
+        # nothing was in flight, so the message below would be a false claim.
+        return if outcome == :error
 
         # Nothing queued, and still not a success. The background thread had already taken the message off the queue
         # and was sending it, which is why the lock could not be acquired. `@queue.size` cannot see that message, so
