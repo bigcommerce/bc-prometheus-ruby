@@ -63,7 +63,7 @@ finishes before the child exits rather than being destroyed with it.
 > it has. Start with a single low-traffic worker pool. Watch its logs for abandoned-metric warnings.
 
 ```bash
-PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED=1
+PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED=1
 ```
 
 Off by default, because it costs one request to the local collector for every observation a job records, and upgrading
@@ -79,12 +79,12 @@ how long other people's jobs take, which is a breaking change and wants a versio
 
 ### Turning it on and off at runtime
 
-`resque_child_flush_enabled` also accepts anything callable, which is asked in the **parent** before every fork. The
+`resque_fork_exit_flush_enabled` also accepts anything callable, which is asked in the **parent** before every fork. The
 child inherits the answer through the fork, so a feature flag client never has to survive one:
 
 ```ruby
 Bigcommerce::Prometheus.configure do |config|
-  config.resque_child_flush_enabled = -> { MyFeatureFlags.enabled?('resque_child_metric_flush') }
+  config.resque_fork_exit_flush_enabled = -> { MyFeatureFlags.enabled?('resque_child_metric_flush') }
 end
 ```
 
@@ -93,7 +93,7 @@ process. `Bigcommerce::Prometheus::Integrations::Resque::JobPayload.for(job).job
 you want the real class name rather than the wrapper's:
 
 ```ruby
-config.resque_child_flush_enabled = lambda do |job|
+config.resque_fork_exit_flush_enabled = lambda do |job|
   MyFeatureFlags.enabled?('resque_child_metric_flush', queue: job.queue)
 end
 ```
@@ -106,8 +106,8 @@ replaces the env var rather than layering on top of it. If you want the env var 
 callable:
 
 ```ruby
-config.resque_child_flush_enabled = lambda do
-  ENV.fetch('PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED', '0').to_i.positive? &&
+config.resque_fork_exit_flush_enabled = lambda do
+  ENV.fetch('PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED', '0').to_i.positive? &&
     MyFeatureFlags.enabled?('resque_child_metric_flush')
 end
 ```
@@ -175,7 +175,7 @@ After requiring the main file, you can further configure with:
 | process_name | What the current process name is (used in logging) | `"unknown"` | `ENV['PROCESS']` |
 | railtie_disabled | Opt out flag for Railtie; use `Bigcommerce::Prometheus::Instrumentors::Web.new(app: Rails.application).start` in your app's code to start it up yourself  | `0` | `ENV['PROMETHEUS_DISABLE_RAILTIE']` |
 | resque_per_job_metrics_enabled | Enable per-job queue-latency and perform-duration histograms (parent-side, no synchronous flush) | `0` | `ENV['PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED']` |
-| resque_child_flush_enabled | Deliver a forked child's own queued metrics before Resque exits it. Accepts a callable, asked in the parent before every fork | `0` | `ENV['PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED']` |
+| resque_fork_exit_flush_enabled | Deliver a forked child's own queued metrics before Resque exits it. Accepts a callable, asked in the parent before every fork | `0` | `ENV['PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED']` |
 
 ## Custom Collectors
 

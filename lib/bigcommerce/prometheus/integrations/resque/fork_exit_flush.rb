@@ -39,11 +39,11 @@ module Bigcommerce
         # It depends on the child having been given a clean queue at fork time; without that the child would
         # synchronously send the parent's backlog too, which is the latency problem this design exists to avoid.
         #
-        # Off unless asked for. `resque_child_flush_enabled` defaults from PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED and,
+        # Off unless asked for. `resque_fork_exit_flush_enabled` defaults from PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED and,
         # like every setting here, an assignment overrides that default. Assign something callable and it is asked
-        # before every fork instead of once at boot. See `Integrations::Resque.resolve_child_flush`.
+        # before every fork instead of once at boot. See `Integrations::Resque.resolve_fork_exit_flush`.
         #
-        module ChildFlush
+        module ForkExitFlush
           # The default for `enabled`. The accessor below reads this same ivar.
           #
           # Assigned directly rather than through `self.enabled =`, which would not work in either
@@ -97,7 +97,7 @@ module Bigcommerce
           def perform(job, &block)
             super
           ensure
-            ChildFlush.flush if fork_per_job? && ChildFlush.enabled
+            ForkExitFlush.flush if fork_per_job? && ForkExitFlush.enabled
           end
         end
       end

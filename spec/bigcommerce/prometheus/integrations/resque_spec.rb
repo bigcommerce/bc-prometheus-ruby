@@ -20,25 +20,25 @@ require 'spec_helper'
 describe Bigcommerce::Prometheus::Integrations::Resque do
   # Resolves whether the child about to be forked should flush. Runs in the parent, which is the whole point: a caller
   # can hand over a feature flag client without any of it reaching a forked child.
-  describe '.resolve_child_flush' do
-    subject(:resolved) { described_class.send(:resolve_child_flush, job) }
+  describe '.resolve_fork_exit_flush' do
+    subject(:resolved) { described_class.send(:resolve_fork_exit_flush, job) }
 
     let(:job) { double('Resque::Job', queue: 'scheduled_action') }
 
     around do |example|
-      original = Bigcommerce::Prometheus.resque_child_flush_enabled
+      original = Bigcommerce::Prometheus.resque_fork_exit_flush_enabled
       example.run
-      Bigcommerce::Prometheus.resque_child_flush_enabled = original
+      Bigcommerce::Prometheus.resque_fork_exit_flush_enabled = original
     end
 
     context 'when the setting is a plain value' do
       it 'is true when enabled' do
-        Bigcommerce::Prometheus.resque_child_flush_enabled = true
+        Bigcommerce::Prometheus.resque_fork_exit_flush_enabled = true
         expect(resolved).to be true
       end
 
       it 'is false when disabled' do
-        Bigcommerce::Prometheus.resque_child_flush_enabled = false
+        Bigcommerce::Prometheus.resque_fork_exit_flush_enabled = false
         expect(resolved).to be false
       end
     end
@@ -46,24 +46,24 @@ describe Bigcommerce::Prometheus::Integrations::Resque do
     context 'when the setting is callable' do
       it 'asks it, so the answer can change between forks without a restart' do
         answers = [true, false].each
-        Bigcommerce::Prometheus.resque_child_flush_enabled = -> { answers.next }
+        Bigcommerce::Prometheus.resque_fork_exit_flush_enabled = -> { answers.next }
 
-        expect(described_class.send(:resolve_child_flush, job)).to be true
-        expect(described_class.send(:resolve_child_flush, job)).to be false
+        expect(described_class.send(:resolve_fork_exit_flush, job)).to be true
+        expect(described_class.send(:resolve_fork_exit_flush, job)).to be false
       end
 
       it 'coerces a truthy answer to a boolean' do
-        Bigcommerce::Prometheus.resque_child_flush_enabled = -> { 'yes' }
+        Bigcommerce::Prometheus.resque_fork_exit_flush_enabled = -> { 'yes' }
         expect(resolved).to be true
       end
 
       it 'passes the job when the callable takes one, so a caller can decide per job' do
-        Bigcommerce::Prometheus.resque_child_flush_enabled = ->(j) { j.queue == 'scheduled_action' }
+        Bigcommerce::Prometheus.resque_fork_exit_flush_enabled = ->(j) { j.queue == 'scheduled_action' }
         expect(resolved).to be true
       end
 
       it 'does not pass the job when the callable takes none' do
-        Bigcommerce::Prometheus.resque_child_flush_enabled = -> { true }
+        Bigcommerce::Prometheus.resque_fork_exit_flush_enabled = -> { true }
         expect { resolved }.not_to raise_error
       end
 
@@ -75,7 +75,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque do
             job.queue == 'scheduled_action'
           end
         end.new
-        Bigcommerce::Prometheus.resque_child_flush_enabled = checker
+        Bigcommerce::Prometheus.resque_fork_exit_flush_enabled = checker
 
         expect(resolved).to be true
       end
@@ -86,7 +86,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque do
 
       before do
         allow(Bigcommerce::Prometheus).to receive(:logger).and_return(logger)
-        Bigcommerce::Prometheus.resque_child_flush_enabled = -> { raise 'flag service unreachable' }
+        Bigcommerce::Prometheus.resque_fork_exit_flush_enabled = -> { raise 'flag service unreachable' }
       end
 
       # This runs as a before_fork hook, so anything escaping here propagates into perform_with_fork and stops the
@@ -101,7 +101,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque do
 
       it 'says why, so a silently disabled flush is diagnosable' do
         resolved
-        expect(logger).to have_received(:warn).with(/child metric flush check failed/)
+        expect(logger).to have_received(:warn).with(/fork exit flush check failed/)
       end
     end
   end

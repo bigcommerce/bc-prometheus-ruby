@@ -17,7 +17,7 @@
 #
 require 'spec_helper'
 
-describe Bigcommerce::Prometheus::Integrations::Resque::ChildFlush do
+describe Bigcommerce::Prometheus::Integrations::Resque::ForkExitFlush do
   let(:client) { instance_double(Bigcommerce::Prometheus::Client, flush!: nil) }
   let(:singleton_client) { instance_double(Bigcommerce::Prometheus::Client, flush!: nil) }
 

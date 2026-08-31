@@ -51,7 +51,7 @@ require_relative 'prometheus/integrations/resque/active_job_payload'
 require_relative 'prometheus/integrations/resque/vanilla_resque_payload'
 require_relative 'prometheus/integrations/resque/job_payload'
 require_relative 'prometheus/integrations/resque/job_metrics'
-require_relative 'prometheus/integrations/resque/child_flush'
+require_relative 'prometheus/integrations/resque/fork_exit_flush'
 require_relative 'prometheus/integrations/resque/fork_reset'
 
 require_relative 'prometheus/servers/puma/server'

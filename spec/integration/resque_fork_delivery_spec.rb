@@ -76,7 +76,7 @@ describe 'metric delivery from Resque forked children', :fork_integration do
       config.server_port = exporter.port
       # Opt in explicitly. The flush is off by default so that bumping the gem cannot change anyone's job latency, and
       # these examples are about what it does once a caller has asked for it.
-      config.resque_child_flush_enabled = true
+      config.resque_fork_exit_flush_enabled = true
       # Far above the 20ms default. Completeness here is a claim about whether the child delivers at all, not about
       # whether it wins a race against a deadline, and a loaded CI runner would otherwise make that flaky.
       config.client_flush_timeout = 5.0
