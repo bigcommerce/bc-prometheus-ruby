@@ -125,27 +125,5 @@ describe Bigcommerce::Prometheus::Client do
       expect(client.instance_variable_get(:@delivery).instance_variable_get(:@queue))
         .to be client.instance_variable_get(:@queue)
     end
-
-    context 'with socket state inherited from the parent' do
-      before do
-        client.instance_variable_set(:@socket, :inherited_socket)
-        client.instance_variable_set(:@socket_started, Time.now.to_f)
-        client.instance_variable_set(:@socket_pid, Process.pid)
-
-        client.reset_after_fork!
-      end
-
-      it 'clears the socket' do
-        expect(client.instance_variable_get(:@socket)).to be_nil
-      end
-
-      it 'clears the socket start time' do
-        expect(client.instance_variable_get(:@socket_started)).to be_nil
-      end
-
-      it 'clears the socket pid' do
-        expect(client.instance_variable_get(:@socket_pid)).to be_nil
-      end
-    end
   end
 end

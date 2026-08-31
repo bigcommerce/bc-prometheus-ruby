@@ -108,9 +108,6 @@ module Bigcommerce
         @queue = Queue.new
         @worker_thread = nil
         @mutex = Mutex.new
-        @socket = nil
-        @socket_started = nil
-        @socket_pid = nil
         @delivery = build_delivery
       end
 
