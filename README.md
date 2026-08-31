@@ -59,6 +59,9 @@ the reset happens before all of them, including any of your own that record metr
 `Resque::Worker#perform`. Delivery is serialised against the background thread, so a request already in progress
 finishes before the child exits rather than being destroyed with it.
 
+> **Experimental.** This has not run in production at scale yet, and the timeout defaults may change once
+> it has. Start with a single low-traffic worker pool. Watch its logs for abandoned-metric warnings.
+
 ```bash
 PROMETHEUS_RESQUE_CHILD_FLUSH_ENABLED=1
 ```
