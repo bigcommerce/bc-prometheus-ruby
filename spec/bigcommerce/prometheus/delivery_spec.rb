@@ -29,9 +29,6 @@ describe Bigcommerce::Prometheus::Delivery do
       queue: queue,
       host: host,
       port: port,
-      open_timeout: Bigcommerce::Prometheus.client_open_timeout,
-      read_timeout: Bigcommerce::Prometheus.client_read_timeout,
-      write_timeout: Bigcommerce::Prometheus.client_write_timeout,
       flush_timeout: flush_timeout,
       process_name: 'test'
     )
@@ -241,26 +238,29 @@ describe Bigcommerce::Prometheus::Delivery do
       queue << 'queued_message'
     end
 
-    it 'bounds the background thread on the configured open timeout' do
+    # Nothing waits on the background thread, so it keeps the 60 second defaults this gem has always sent
+    # under. Shortening them here would re-time delivery for every existing user, including the ones who
+    # never enable the flush.
+    it 'leaves the connect timeout at the Net::HTTP default' do
       delivery.process_queue
-      expect(http).to have_received(:open_timeout=).with(Bigcommerce::Prometheus.client_open_timeout)
+      expect(http).not_to have_received(:open_timeout=)
     end
 
-    it 'bounds the background thread on the configured read timeout' do
+    it 'leaves the response timeout at the Net::HTTP default' do
       delivery.process_queue
-      expect(http).to have_received(:read_timeout=).with(Bigcommerce::Prometheus.client_read_timeout)
+      expect(http).not_to have_received(:read_timeout=)
     end
 
-    it 'bounds the write timeout, which Net::HTTP otherwise leaves at 60 seconds' do
+    it 'leaves the send timeout at the Net::HTTP default' do
       delivery.process_queue
-      expect(http).to have_received(:write_timeout=).with(Bigcommerce::Prometheus.client_write_timeout)
+      expect(http).not_to have_received(:write_timeout=)
     end
   end
 
   describe '#flush! against a collector that stops answering' do
     # A real socket that accepts and then never replies, which is what a saturated exporter looks like from here.
     # Timeouts run against the clock, so a stub cannot show that the bound holds. Without it this example takes as
-    # long as the read timeout, five seconds when it was written.
+    # long as `Net::HTTP`'s 60 second read default.
     let(:stalled_collector) { TCPServer.new('127.0.0.1', 0) }
     let(:port) { stalled_collector.addr[1] }
 
@@ -281,7 +281,7 @@ describe Bigcommerce::Prometheus::Delivery do
       delivery.flush!
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
 
-      expect(elapsed).to be < Bigcommerce::Prometheus.client_read_timeout
+      expect(elapsed).to be < 1.0
     end
 
     it 'says the observation was dropped, so an outage is not silent' do

@@ -29,9 +29,6 @@ module Bigcommerce
         client_custom_labels: nil,
         client_max_queue_size: ENV.fetch('PROMETHEUS_CLIENT_MAX_QUEUE_SIZE', 10_000).to_i,
         client_thread_sleep: ENV.fetch('PROMETHEUS_CLIENT_THREAD_SLEEP', 0.5).to_f,
-        client_open_timeout: ENV.fetch('PROMETHEUS_CLIENT_OPEN_TIMEOUT', 0.5).to_f,
-        client_read_timeout: ENV.fetch('PROMETHEUS_CLIENT_READ_TIMEOUT', 1.0).to_f,
-        client_write_timeout: ENV.fetch('PROMETHEUS_CLIENT_WRITE_TIMEOUT', 0.5).to_f,
         client_flush_timeout: ENV.fetch('PROMETHEUS_CLIENT_FLUSH_TIMEOUT', 0.02).to_f,
 
         # Integration configuration

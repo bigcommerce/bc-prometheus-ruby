@@ -126,9 +126,6 @@ module Bigcommerce
           queue: @queue,
           host: @host,
           port: @port,
-          open_timeout: ::Bigcommerce::Prometheus.client_open_timeout,
-          read_timeout: ::Bigcommerce::Prometheus.client_read_timeout,
-          write_timeout: ::Bigcommerce::Prometheus.client_write_timeout,
           flush_timeout: ::Bigcommerce::Prometheus.client_flush_timeout,
           process_name: @process_name
         )

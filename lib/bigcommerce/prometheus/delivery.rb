@@ -44,19 +44,13 @@ module Bigcommerce
       #   constructed is what gets delivered, which is why a fork replaces the client's queue and this object together.
       # @param [String] host
       # @param [Integer] port
-      # @param [Float] open_timeout
-      # @param [Float] read_timeout
-      # @param [Float] write_timeout
       # @param [Float] flush_timeout total budget for a `flush!`, across every message it sends
       # @param [String] process_name named in every warning, so a child's warnings can be told from the parent's
       #
-      def initialize(queue:, host:, port:, open_timeout:, read_timeout:, write_timeout:, flush_timeout:, process_name:)
+      def initialize(queue:, host:, port:, flush_timeout:, process_name:)
         @queue = queue
         @host = host
         @port = port
-        @open_timeout = open_timeout
-        @read_timeout = read_timeout
-        @write_timeout = write_timeout
         @flush_timeout = flush_timeout
         @process_name = process_name
         @delivery_mutex = Mutex.new
@@ -147,21 +141,25 @@ module Bigcommerce
       end
 
       ##
-      # Post a single message with bounded timeouts.
+      # Post a single message.
       #
-      # `Net::HTTP` defaults every timeout to 60 seconds. That is ok on the background thread.
-      # However, inline in a job, an unhealthy collector would stall every unit of work.
-      # The collector is normally on localhost, so the defaults here are short
+      # A flush passes the time it has left. An unhealthy collector then costs a job a known amount,
+      # rather than however long the network takes to give up.
+      #
+      # The background thread passes nothing, so `Net::HTTP`'s own 60 second defaults apply. Nothing waits
+      # on that thread, and those are the timeouts this gem has always delivered under.
       #
       # @param [String] message
-      # @param [Float|NilClass] timeout overrides all three phases when given
+      # @param [Float|NilClass] timeout bounds all three phases when given
       #
       def post_message(message, timeout: nil)
         uri = uri_path('/send-metrics')
         http = ::Net::HTTP.new(uri.host, uri.port)
-        http.open_timeout = timeout || @open_timeout
-        http.read_timeout = timeout || @read_timeout
-        http.write_timeout = timeout || @write_timeout
+        if timeout
+          http.open_timeout = timeout
+          http.read_timeout = timeout
+          http.write_timeout = timeout
+        end
         http.start { |connection| connection.post(uri.path, message) }
       end
 
