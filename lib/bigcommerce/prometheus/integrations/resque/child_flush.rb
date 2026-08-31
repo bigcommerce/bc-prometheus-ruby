@@ -44,6 +44,13 @@ module Bigcommerce
         # before every fork instead of once at boot. See `Integrations::Resque.resolve_child_flush`.
         #
         module ChildFlush
+          # The default for `enabled`. The accessor below reads this same ivar.
+          #
+          # Assigned directly rather than through `self.enabled =`, which would not work in either
+          # position. The accessor does not exist yet here. Inside `class << self` the receiver would be
+          # the singleton class, which does not have the writer.
+          @enabled = false
+
           class << self
             ##
             # Whether the child about to run should flush, decided by the parent in `Resque.before_fork` and inherited
@@ -81,7 +88,6 @@ module Bigcommerce
               client.flush! if client.respond_to?(:flush!)
             end
           end
-          self.enabled = false
 
           ##
           # Wraps `Resque::Worker#perform`, which is the in-child entry point when the worker forks per job. Guarded on
