@@ -284,9 +284,13 @@ describe Bigcommerce::Prometheus::Delivery do
       expect(elapsed).to be < 0.1
     end
 
-    it 'says the observation was dropped, so an outage is not silent' do
+    # Two things can end this flush, and which one wins is a race. `drain`'s own deadline can expire, naming
+    # the message it was carrying, or the watchdog can stop the thread first and report an in-flight send.
+    # Both say an observation was lost, which is the part that matters. Asserting either one alone is
+    # asserting which mechanism happened to win.
+    it 'says something was lost, so an outage is not silent' do
       delivery.flush!
-      expect(prometheus_logger).to have_received(:warn).with(/dropping a message/)
+      expect(prometheus_logger).to have_received(:warn).with(/dropping a message|in-flight send/)
     end
   end
   describe '#flush! when delivery overruns the budget' do
