@@ -74,12 +74,32 @@ module Bigcommerce
       # @return [Symbol] one of :empty, :success, :timeout, :error
       #
       def flush!
-        outcome = attempt_flush
+        outcome = attempt_flush_within_budget
         report_outcome(outcome)
         outcome
       end
 
       private
+
+      ##
+      # Run the flush on a thread we can stop, and take the budget back if it overruns.
+      #
+      # `Net::HTTP` bounds each phase of a request separately rather than the request as a whole. Per-phase
+      # timeouts alone therefore let one slow message overrun the budget several times over. Stopping a
+      # thread is what holds the wall clock to the number that was configured.
+      #
+      # `Thread#kill` runs ensure blocks, so the delivery lock is released rather than left held by a
+      # thread that no longer exists.
+      #
+      # @return [Symbol]
+      #
+      def attempt_flush_within_budget
+        worker = Thread.new { attempt_flush }
+        return worker.value if worker.join(@flush_timeout)
+
+        worker.kill
+        :timeout
+      end
 
       # @return [Symbol]
       def attempt_flush
@@ -146,20 +166,19 @@ module Bigcommerce
       # A flush passes the time it has left. An unhealthy collector then costs a job a known amount,
       # rather than however long the network takes to give up.
       #
+      # Each phase is capped at the whole remaining budget rather than a share of it, because the flush is
+      # bounded as a whole by `attempt_flush_within_budget`. A phase that stalls is stopped there.
+      #
       # The background thread passes nothing, so `Net::HTTP`'s own 60 second defaults apply. Nothing waits
       # on that thread, and those are the timeouts this gem has always delivered under.
       #
       # @param [String] message
-      # @param [Float|NilClass] timeout bounds all three phases when given
+      # @param [Float|NilClass] timeout caps each phase of this request when given
       #
       def post_message(message, timeout: nil)
         uri = uri_path('/send-metrics')
         http = ::Net::HTTP.new(uri.host, uri.port)
-        if timeout
-          http.open_timeout = timeout
-          http.read_timeout = timeout
-          http.write_timeout = timeout
-        end
+        http.open_timeout = http.read_timeout = http.write_timeout = timeout if timeout
         http.start { |connection| connection.post(uri.path, message) }
       end
 

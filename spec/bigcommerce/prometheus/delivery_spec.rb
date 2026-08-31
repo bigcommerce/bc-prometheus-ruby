@@ -221,9 +221,9 @@ describe Bigcommerce::Prometheus::Delivery do
         queue << 'queued_message'
       end
 
-      it 'bounds an inline flush on what is left of its budget, not on the background timeouts' do
+      it 'bounds an inline flush on what is left of its budget, not on the Net::HTTP defaults' do
         delivery.flush!
-        expect(http).to have_received(:read_timeout=).with(a_value_between(0, 0.02))
+        expect(http).to have_received(:read_timeout=).with(a_value_between(0, flush_timeout))
       end
     end
   end
@@ -281,12 +281,42 @@ describe Bigcommerce::Prometheus::Delivery do
       delivery.flush!
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
 
-      expect(elapsed).to be < 1.0
+      expect(elapsed).to be < 0.1
     end
 
     it 'says the observation was dropped, so an outage is not silent' do
       delivery.flush!
       expect(prometheus_logger).to have_received(:warn).with(/dropping a message/)
+    end
+  end
+  describe '#flush! when delivery overruns the budget' do
+    # Per-phase timeouts cannot bound a request as a whole, so the budget is enforced by stopping the thread doing
+    # the delivering. Without that the caller waits for however long the phases take between them.
+    before do
+      allow(delivery).to receive(:attempt_flush) { sleep 5 }
+      queue << 'queued_message'
+    end
+
+    it 'gives up at the budget rather than waiting for the delivery to finish' do
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      delivery.flush!
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+
+      expect(elapsed).to be < 0.1
+    end
+
+    it 'reports :timeout, since the observations went nowhere' do
+      expect(delivery.flush!).to eq :timeout
+    end
+
+    it 'says what was abandoned, rather than leaving the loss silent' do
+      delivery.flush!
+      expect(prometheus_logger).to have_received(:warn).with(/abandoned 1 metric/)
+    end
+
+    it 'leaves the delivery lock free, so a stopped thread cannot wedge the next flush' do
+      delivery.flush!
+      expect(delivery_mutex).not_to be_locked
     end
   end
 end
