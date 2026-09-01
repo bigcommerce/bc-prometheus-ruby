@@ -63,7 +63,10 @@ describe 'metric delivery from Resque forked children', :fork_integration do
   let(:queue) { ForkDeliveryProbeJob.instance_variable_get(:@queue) }
 
   before do
-    skip "redis unavailable at #{redis_url}" unless redis_available?
+    # Raise rather than skip. The tag filter means this hook only runs when someone asked for these specs, so
+    # a missing redis is a broken request rather than an absent option. Skipping here reported a green CI
+    # run that had forked nothing.
+    raise "redis unavailable at #{redis_url}; the fork integration specs need one" unless redis_available?
 
     Resque.redis = Redis.new(url: redis_url)
     Resque.redis.redis.flushdb
