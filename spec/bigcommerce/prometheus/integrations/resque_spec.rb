@@ -130,4 +130,50 @@ describe Bigcommerce::Prometheus::Integrations::Resque do
       expect(logger).to have_received(:info).with(/only delivered if the background thread runs/)
     end
   end
+
+  describe '.install_fork_exit_flush with a client that cannot flush' do
+    # `Integrations::Resque.start` accepts any client, so a plain `PrometheusExporter::Client` can reach here. It has
+    # no `flush!`. The per-job path stays silent about that on purpose, which left this case with no signal at all.
+    let(:logger) { instance_double(Logger, warn: nil, info: nil) }
+    let(:client) { instance_double(PrometheusExporter::Client) }
+
+    # Resque is not loaded here, so the constants the install touches are stubbed, as job_metrics_spec does.
+    let(:worker_class) { Class.new }
+    let(:resque_module) do
+      Module.new do
+        def self.before_fork(&block); end
+      end
+    end
+
+    before do
+      allow(Bigcommerce::Prometheus).to receive(:logger).and_return(logger)
+      allow(worker_class).to receive(:prepend)
+      stub_const('Resque', resque_module)
+      stub_const('Resque::Worker', worker_class)
+      Bigcommerce::Prometheus.resque_fork_exit_flush_enabled = true
+      described_class.instance_variable_set(:@fork_exit_flush_installed, nil)
+    end
+
+    after { described_class.instance_variable_set(:@fork_exit_flush_installed, nil) }
+
+    it 'says so at boot, which is the only place the caller is told' do
+      described_class.send(:install_fork_exit_flush, client)
+      expect(logger).to have_received(:warn).with(/does not support flush!/)
+    end
+
+    it 'does not wire up a flush that cannot run' do
+      described_class.send(:install_fork_exit_flush, client)
+      expect(worker_class).not_to have_received(:prepend)
+    end
+
+    it 'leaves itself uninstalled, so a later call with a usable client still works' do
+      described_class.send(:install_fork_exit_flush, client)
+      expect(described_class.instance_variable_get(:@fork_exit_flush_installed)).to be_nil
+    end
+
+    it 'installs normally when the client can flush' do
+      described_class.send(:install_fork_exit_flush, instance_double(Bigcommerce::Prometheus::Client, flush!: nil))
+      expect(worker_class).to have_received(:prepend)
+    end
+  end
 end

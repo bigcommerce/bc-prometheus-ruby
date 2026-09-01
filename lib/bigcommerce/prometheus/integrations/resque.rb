@@ -96,23 +96,14 @@ module Bigcommerce
           #
           def install_fork_exit_flush(client)
             return if @fork_exit_flush_installed
+            return log_fork_exit_flush_off unless ::Bigcommerce::Prometheus.resque_fork_exit_flush_enabled
 
-            unless ::Bigcommerce::Prometheus.resque_fork_exit_flush_enabled
-              # Hedged deliberately. The child starts a delivery thread on the first push, and upstream
-              # runs its loop once before sleeping. A job that keeps working after pushing often does
-              # get its metric out. What the flush adds is reliability rather than delivery.
-              #
-              # Info rather than warn: this is the default, and it is the behaviour every caller already had. A warning
-              # on every worker boot of every service would only teach people to ignore warnings. Said out loud anyway,
-              # because a metric that never arrives is otherwise indistinguishable from one that was never recorded.
-              ::Bigcommerce::Prometheus.logger&.info(
-                '[bigcommerce-prometheus] resque fork exit flush is off, so metrics recorded inside a job are only ' \
-                'delivered if the background thread runs before the child exits; set ' \
-                'PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED=1 to deliver them reliably, at the cost of one request ' \
-                'per observation a job records'
-              )
-              return
-            end
+            # Asked once here rather than only per job. `ForkExitFlush.flush` checks too, but deliberately says
+            # nothing, because it runs inside an `ensure` where raising would replace whatever the job was
+            # already raising. That leaves a caller who passes an unsupported client with no signal at all.
+            # Boot is the one place a complaint is safe. It is the long-lived parent, once, well away from any
+            # job's exception handling.
+            return log_fork_exit_flush_unsupported unless client.respond_to?(:flush!)
 
             ForkExitFlush.client = client
             ::Resque::Worker.prepend(ForkExitFlush)
@@ -150,6 +141,36 @@ module Bigcommerce
               "[bigcommerce-prometheus] resque fork exit flush check failed, not flushing this job: #{e}"
             )
             false
+          end
+
+          ##
+          # Hedged deliberately. The child starts a delivery thread on the first push, and upstream runs its loop
+          # once before sleeping. A job that keeps working after pushing often does get its metric out. What the
+          # flush adds is reliability rather than delivery.
+          #
+          # Info rather than warn: this is the default, and it is what every caller already had. A warning on every
+          # worker boot of every service would only teach people to ignore warnings. Said out loud anyway, because a
+          # metric that never arrives is otherwise indistinguishable from one that was never recorded.
+          #
+          def log_fork_exit_flush_off
+            ::Bigcommerce::Prometheus.logger&.info(
+              '[bigcommerce-prometheus] resque fork exit flush is off, so metrics recorded inside a job are only ' \
+              'delivered if the background thread runs before the child exits; set ' \
+              'PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED=1 to deliver them reliably, at the cost of one request ' \
+              'per observation a job records'
+            )
+          end
+
+          ##
+          # Warn rather than info. Unlike the setting being off, this is a configuration mistake: the caller asked
+          # for the flush and cannot have it.
+          #
+          def log_fork_exit_flush_unsupported
+            ::Bigcommerce::Prometheus.logger&.warn(
+              '[bigcommerce-prometheus] resque fork exit flush is enabled but the client does not support flush!, ' \
+              'so nothing is flushed before a child exits; metrics recorded inside a job are only delivered if ' \
+              'the background thread runs first'
+            )
           end
 
           def log_fork_exit_flush_installed
