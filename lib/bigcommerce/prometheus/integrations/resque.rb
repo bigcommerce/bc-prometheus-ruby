@@ -98,12 +98,17 @@ module Bigcommerce
             return if @fork_exit_flush_installed
 
             unless ::Bigcommerce::Prometheus.resque_fork_exit_flush_enabled
+              # Hedged deliberately. The child starts a delivery thread on the first push, and upstream
+              # runs its loop once before sleeping. A job that keeps working after pushing often does
+              # get its metric out. What the flush adds is reliability rather than delivery.
+              #
               # Info rather than warn: this is the default, and it is the behaviour every caller already had. A warning
               # on every worker boot of every service would only teach people to ignore warnings. Said out loud anyway,
               # because a metric that never arrives is otherwise indistinguishable from one that was never recorded.
               ::Bigcommerce::Prometheus.logger&.info(
-                '[bigcommerce-prometheus] resque fork exit flush is off, so metrics recorded inside a job are not ' \
-                'delivered; set PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED=1 to deliver them, at the cost of one request ' \
+                '[bigcommerce-prometheus] resque fork exit flush is off, so metrics recorded inside a job are only ' \
+                'delivered if the background thread runs before the child exits; set ' \
+                'PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED=1 to deliver them reliably, at the cost of one request ' \
                 'per observation a job records'
               )
               return

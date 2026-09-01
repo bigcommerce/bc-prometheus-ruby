@@ -105,4 +105,29 @@ describe Bigcommerce::Prometheus::Integrations::Resque do
       end
     end
   end
+
+  describe '.install_fork_exit_flush when the flush is off' do
+    let(:logger) { instance_double(Logger, info: nil) }
+    let(:client) { instance_double(Bigcommerce::Prometheus::Client) }
+
+    before do
+      allow(Bigcommerce::Prometheus).to receive(:logger).and_return(logger)
+      Bigcommerce::Prometheus.resque_fork_exit_flush_enabled = false
+      described_class.instance_variable_set(:@fork_exit_flush_installed, nil)
+      described_class.send(:install_fork_exit_flush, client)
+    end
+
+    after { described_class.instance_variable_set(:@fork_exit_flush_installed, nil) }
+
+    it 'says the flush is off, since a metric that never arrives looks like one never recorded' do
+      expect(logger).to have_received(:info).with(/fork exit flush is off/)
+    end
+
+    # The child starts a delivery thread on the first push, and upstream runs its loop once before sleeping. A job
+    # that keeps working after pushing often does get its metric out. A flat "are not delivered" would be false for
+    # those jobs. The bench measures 100 of 200 arriving on a job that pushes, works, then pushes again.
+    it 'does not claim the observations are always lost, because that depends on the job' do
+      expect(logger).to have_received(:info).with(/only delivered if the background thread runs/)
+    end
+  end
 end
