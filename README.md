@@ -46,9 +46,11 @@ Bigcommerce::Prometheus::Instrumentors::Resque.new(app: Rails.application).start
 ### Metrics pushed from inside a job
 
 Resque runs each job in a forked child that ends with `exit!`, which runs no at_exit handlers and does not wait for
-threads. Pushing a metric only queues it; delivery happens on a background thread that wakes every
-`client_thread_sleep` seconds. A child that pushes and then returns is normally torn down before that thread runs, so
-the observation is silently discarded.
+threads. Pushing a metric only queues it. Delivery happens on a background thread, which attempts one as soon as it
+starts and then sleeps `client_thread_sleep` between passes.
+
+Whatever is still queued when the child exits is discarded, silently. A job that pushes and returns loses the
+observation. A job that keeps working after pushing often does not.
 
 **Always on:** the child is given a clean client queue at fork time, by wrapping `Resque::Worker#perform`. Without this
 it would inherit a copy of whatever the parent had not yet drained and have to re-send all of it before reaching its

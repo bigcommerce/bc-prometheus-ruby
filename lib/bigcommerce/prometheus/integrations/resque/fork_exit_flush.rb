@@ -23,9 +23,13 @@ module Bigcommerce
         # Deliver a forked child's observations before Resque tears it down.
         #
         # Resque runs each job in a child that ends with `exit!`, which runs no at_exit handlers and does not wait for
-        # threads. The client only queues on push and delivers on a background thread that wakes every
-        # `client_thread_sleep` seconds, so anything a job pushes is normally destroyed with the child. Draining on the
-        # calling thread before the job returns is the only way an in-child observation reliably arrives.
+        # threads. Pushing only queues. Delivery happens on a background thread, and whatever is still queued when
+        # the child exits goes with it.
+        #
+        # That thread attempts a delivery as soon as it starts, then sleeps `client_thread_sleep` between
+        # passes. So a job that keeps working after pushing often does get its observation out. A job that
+        # pushes and returns does not. Draining on the calling thread before the job returns is what makes
+        # delivery reliable rather than likely.
         #
         # This is deliberately not the approach taken for the `resque_job` histograms, which are recorded in the parent
         # precisely to avoid paying anything per job. It exists for the observations application code pushes from
