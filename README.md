@@ -43,6 +43,96 @@ require 'bigcommerce/prometheus'
 Bigcommerce::Prometheus::Instrumentors::Resque.new(app: Rails.application).start
 ```
 
+### Metrics pushed from inside a job
+
+Resque runs each job in a forked child that ends with `exit!`, which runs no at_exit handlers and does not wait for
+threads. Pushing a metric only queues it; delivery happens on a background thread that wakes every
+`client_thread_sleep` seconds. A child that pushes and then returns is normally torn down before that thread runs, so
+the observation is silently discarded.
+
+**Always on:** the child is given a clean client queue at fork time, by wrapping `Resque::Worker#perform`. Without this
+it would inherit a copy of whatever the parent had not yet drained and have to re-send all of it before reaching its
+own message. This costs nothing and needs no configuration. `Worker#perform` is what runs the `after_fork` hooks, so
+the reset happens before all of them, including any of your own that record metrics.
+
+**Opt in:** the child can also deliver its own queue on the calling thread before the job returns, by wrapping
+`Resque::Worker#perform`. Delivery is serialised against the background thread, so a request already in progress
+finishes before the child exits rather than being destroyed with it.
+
+> **Experimental.** This has not run in production at scale yet, and the timeout defaults may change once
+> it has. Start with a single low-traffic worker pool. Watch its logs for abandoned-metric warnings.
+
+```bash
+PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED=1
+```
+
+Off by default, because it costs one request to the local collector for every observation a job records, and upgrading
+this gem should not change how long anybody's jobs take. Jobs that record nothing pay nothing either way. Turn it on if
+you record metrics from inside Resque jobs and would rather have them than the throughput.
+
+Each queued message is sent as its own request. That is how this gem has delivered metrics since it stopped using the
+upstream chunked socket, so the flush does not add requests, it moves ones that were already being made onto the job's
+critical path. A job that records one observation pays for one request; a job that records ten pays for ten.
+
+That default is a deliberate position rather than caution waiting to be undone. Turning it on for everyone would change
+how long other people's jobs take, which is a breaking change and wants a version bump to match.
+
+### Turning it on and off at runtime
+
+`resque_fork_exit_flush_enabled` also accepts anything callable, which is asked in the **parent** before every fork. The
+child inherits the answer through the fork, so a feature flag client never has to survive one:
+
+```ruby
+Bigcommerce::Prometheus.configure do |config|
+  config.resque_fork_exit_flush_enabled = -> { MyFeatureFlags.enabled?('resque_child_metric_flush') }
+end
+```
+
+A callable that accepts an argument is handed the `Resque::Job`, so the decision can vary per job as well as per
+process. `Bigcommerce::Prometheus::Integrations::Resque::JobPayload.for(job).job_class` unwraps ActiveJob's payload if
+you want the real class name rather than the wrapper's:
+
+```ruby
+config.resque_fork_exit_flush_enabled = lambda do |job|
+  MyFeatureFlags.enabled?('resque_child_metric_flush', queue: job.queue)
+end
+```
+
+The callable must not be relied on to succeed. Anything it raises is caught and treated as "do not flush", because it
+runs as a `Resque.before_fork` hook where an escaping exception would stop the worker processing jobs.
+
+The env var supplies the default and an assignment overrides it, as with every other setting here, so a callable
+replaces the env var rather than layering on top of it. If you want the env var to stay an override, say so in your own
+callable:
+
+```ruby
+config.resque_fork_exit_flush_enabled = lambda do
+  ENV.fetch('PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED', '0').to_i.positive? &&
+    MyFeatureFlags.enabled?('resque_child_metric_flush')
+end
+```
+
+A job is real work, and it should not wait on the metrics pipeline for long. Delivery is therefore bounded by
+`PROMETHEUS_CLIENT_FLUSH_TIMEOUT`, 20ms by default, covering the wait for the delivery lock as well as the requests
+themselves. An unhealthy collector costs a job that much and no more. Past the deadline the observations are abandoned
+and a warning is logged, which is the only signal you will get, since the metric that would have reported the outage is
+the one being lost.
+
+That budget is for the whole flush rather than for each request, and each queued observation is a request of its own.
+So a job recording one observation has the full 20ms for it, and a job recording ten shares the same 20ms between ten.
+The more a job records, the likelier it is to lose the tail of what it recorded. Raise
+`PROMETHEUS_CLIENT_FLUSH_TIMEOUT` if your jobs record several metrics each and you would rather have them than the
+latency.
+
+`flush!` returns `:empty`, `:success`, `:timeout` or `:error` if you want to act on the result yourself. A timeout says
+either that the deadline expired part way through sending, in which case the warning says how many observations were
+abandoned, or that the delivery lock could not be taken at all. The second case leaves the queue empty, because the
+background thread had already taken the message it was sending, so the warning names the in-flight request instead of a
+count.
+
+Note that this applies to metrics your application code pushes from inside a job. The per-job histograms below are
+recorded in the parent and never pay this cost.
+
 ### Per-job metrics (opt-in)
 
 Set `PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED=1` on Resque worker pods to enable two additional histograms recorded from the parent worker process.
@@ -77,6 +167,7 @@ After requiring the main file, you can further configure with:
 | client_custom_labels | A hash of custom labels to send with each client request | `{}` | None |
 | client_max_queue_size | The max amount of metrics to send before flushing | `10000` | `ENV['PROMETHEUS_CLIENT_MAX_QUEUE_SIZE']` |
 | client_thread_sleep | How often to sleep the worker thread that manages the client buffer (seconds) | `0.5` | `ENV['PROMETHEUS_CLIENT_THREAD_SLEEP']` |
+| client_flush_timeout | Total a synchronous flush will spend before abandoning what is queued (seconds) | `0.02` | `ENV['PROMETHEUS_CLIENT_FLUSH_TIMEOUT']` |
 | puma_collection_frequency | How often to poll puma collection metrics (seconds) | `30` | `ENV['PROMETHEUS_PUMA_COLLECTION_FREQUENCY']` |
 | server_host | The host to run the exporter on | `"0.0.0.0"` | `ENV['PROMETHEUS_SERVER_HOST']` |
 | server_port | The port to run the exporter on | `9394` | `ENV['PROMETHEUS_SERVER_PORT']` |
@@ -84,6 +175,7 @@ After requiring the main file, you can further configure with:
 | process_name | What the current process name is (used in logging) | `"unknown"` | `ENV['PROCESS']` |
 | railtie_disabled | Opt out flag for Railtie; use `Bigcommerce::Prometheus::Instrumentors::Web.new(app: Rails.application).start` in your app's code to start it up yourself  | `0` | `ENV['PROMETHEUS_DISABLE_RAILTIE']` |
 | resque_per_job_metrics_enabled | Enable per-job queue-latency and perform-duration histograms (parent-side, no synchronous flush) | `0` | `ENV['PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED']` |
+| resque_fork_exit_flush_enabled | Deliver a forked child's own queued metrics before Resque exits it. Accepts a callable, asked in the parent before every fork | `0` | `ENV['PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED']` |
 
 ## Custom Collectors
 

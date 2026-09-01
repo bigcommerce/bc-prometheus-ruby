@@ -20,6 +20,9 @@ module Bigcommerce
     ##
     # Client implementation for Prometheus
     #
+    # Queueing and registration are the superclass's. Everything about getting a queued message to the collector
+    # belongs to `Delivery`, which this hands its own queue to and rebuilds whenever that queue is replaced.
+    #
     class Client < ::PrometheusExporter::Client
       include Singleton
       include Loggable
@@ -42,6 +45,7 @@ module Bigcommerce
         )
         PrometheusExporter::Client.default = self
         @process_name = process_name || ::Bigcommerce::Prometheus.process_name
+        @delivery = build_delivery
       end
 
       ##
@@ -62,14 +66,6 @@ module Bigcommerce
       end
 
       ##
-      # @param [String] path
-      # @return [Module<URI>]
-      #
-      def uri_path(path)
-        URI("http://#{@host}:#{@port}#{path}")
-      end
-
-      ##
       # @param [String] str
       def send(str)
         return unless Bigcommerce::Prometheus.enabled
@@ -80,16 +76,59 @@ module Bigcommerce
       ##
       # Process the current queue and flush to the collector
       #
+      # Overridden because the superclass streams onto a long-lived socket, which this gem stopped doing. Called by
+      # the background worker thread only.
+      #
       def process_queue
-        while @queue.length.to_i.positive?
-          begin
-            message = @queue.pop
-            Net::HTTP.post(uri_path('/send-metrics'), message)
-          rescue StandardError => e
-            logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter is dropping a message to #{uri_path('/send-metrics')}: #{e}"
-            raise
-          end
-        end
+        @delivery.process_queue
+      end
+
+      ##
+      # Deliver what is queued before the caller stops being able to.
+      #
+      # @return [Symbol] one of :empty, :success, :timeout, :error
+      #
+      def flush!
+        @delivery.flush!
+      end
+
+      ##
+      # Discard the state a forked child inherited from its parent.
+      #
+      # The client is a singleton, so `fork` hands the child a copy of the parent's outbound queue
+      # Anything still queued in the parent therefore has to be re-sent by the child,
+      #
+      # The mutex is reset for a rarer case. If the fork happens while another thread holds the mutex, the child inherits a
+      # locked mutex and can never claim it.
+      #
+      # `Delivery` is rebuilt last, and for both reasons at once. It has to be given the new queue, and its own
+      # delivery lock may have been held by a thread that did not survive the fork.
+      #
+      def reset_after_fork!
+        @queue = Queue.new
+        @worker_thread = nil
+        @mutex = Mutex.new
+        @delivery = build_delivery
+      end
+
+      private
+
+      ##
+      # Whatever is queued now, and the settings to deliver it under.
+      #
+      # Built rather than assigned once, so `reset_after_fork!` can replace it wholesale. That is how a child stops
+      # sharing a queue, and a delivery lock, with the parent it forked from.
+      #
+      # @return [Bigcommerce::Prometheus::Delivery]
+      #
+      def build_delivery
+        Delivery.new(
+          queue: @queue,
+          host: @host,
+          port: @port,
+          flush_timeout: ::Bigcommerce::Prometheus.client_flush_timeout,
+          process_name: @process_name
+        )
       end
     end
   end

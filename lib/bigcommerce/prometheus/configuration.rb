@@ -29,6 +29,7 @@ module Bigcommerce
         client_custom_labels: nil,
         client_max_queue_size: ENV.fetch('PROMETHEUS_CLIENT_MAX_QUEUE_SIZE', 10_000).to_i,
         client_thread_sleep: ENV.fetch('PROMETHEUS_CLIENT_THREAD_SLEEP', 0.5).to_f,
+        client_flush_timeout: ENV.fetch('PROMETHEUS_CLIENT_FLUSH_TIMEOUT', 0.02).to_f,
 
         # Integration configuration
         puma_collection_frequency: ENV.fetch('PROMETHEUS_PUMA_COLLECTION_FREQUENCY', 30).to_i,
@@ -36,6 +37,11 @@ module Bigcommerce
         resque_collection_frequency: ENV.fetch('PROMETHEUS_RESQUE_COLLECTION_FREQUENCY', 30).to_i,
         resque_process_label: ENV.fetch('PROMETHEUS_RESQUE_PROCESS_LABEL', 'resque').to_s,
         resque_per_job_metrics_enabled: ENV.fetch('PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED', 0).to_i.positive?,
+        # Off deliberately, not by oversight. Enabling it adds a synchronous request to every Resque job that records
+        # a metric, so changing this default changes how long other people's jobs take. That is a breaking change and
+        # wants a version bump to match, the way 0.4.0 handled moving the thread pool default from 20 to 3.
+        # Also accepts anything callable, resolved in the parent before every fork.
+        resque_fork_exit_flush_enabled: ENV.fetch('PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED', 0).to_i.positive?,
 
         # Server configuration
         not_found_body: ENV.fetch('PROMETHEUS_SERVER_NOT_FOUND_BODY', 'Not Found! The Prometheus Ruby Exporter only listens on /metrics and /send-metrics').to_s,
