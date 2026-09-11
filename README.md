@@ -114,6 +114,13 @@ config.resque_flush_on_exit_enabled = lambda do
 end
 ```
 
+Assign the callable before the integration starts. The setting is read once at startup, and the flush is only installed
+when that read finds a truthy value or something callable. Assign the callable after
+`Bigcommerce::Prometheus::Instrumentors::Resque.new(app: Rails.application).start` and nothing is installed, so the
+callable is never called. The log line reporting the flush as off is written at that same moment, before the callable
+exists, so the logs give no sign that ordering was the problem. Put the `configure` block in an initializer that runs
+first.
+
 A job is real work, and it should not wait on the metrics pipeline for long. Delivery is therefore bounded by
 `PROMETHEUS_CLIENT_FLUSH_TIMEOUT`, 20ms by default, covering the wait for the delivery lock as well as the requests
 themselves. An unhealthy collector costs a job that much and no more. Past the deadline the observations are abandoned

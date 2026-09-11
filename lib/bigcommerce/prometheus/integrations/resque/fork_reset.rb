@@ -22,22 +22,16 @@ module Bigcommerce
         ##
         # Give a forked child a clean client, before anything in that child can use the one it inherited.
         #
-        # The client is a singleton, so `fork` hands the child a copy of the parent's outbound queue while leaving the
-        # thread that would drain it behind. Those messages are the parent's to send, and it still holds them. The
-        # child starts with an empty queue and sends only what its own job observes.
+        # The client is a singleton, so `fork` hands the child a copy of the parent's outbound queue.
+        # Those messages are the parent's to send, and it still holds them.
+        # ForkReset ensures that the child starts with an empty queue and sends only what its own job observes.
         #
-        # Wraps `Resque::Worker#perform` rather than registering a `Resque.after_fork` hook. A hook works, but
-        # `Resque.after_fork` appends and `Resque::Worker#run_hook` runs hooks in registration order, so an application
-        # hook that records a metric and happened to be registered first would have its observation enqueued here and
-        # then discarded. `Worker#perform` is what runs those hooks, so wrapping it puts the reset ahead of all of them
-        # whatever order anyone registers in.
+        # Wraps `Resque::Worker#perform` rather than registering a `Resque.after_fork` hook to ensure metrics sent during hooks are not lost
+        # `Worker#perform` is what runs the hooks, so wrapping it puts the reset ahead of all of them.
         #
         module ForkReset
           class << self
             ##
-            # The client to reset. Held here rather than captured in a closure so the flush half of this integration
-            # can be handed the same object. See `Integrations::Resque.start`.
-            #
             # @return [PrometheusExporter::Client]
             #
             attr_accessor :client

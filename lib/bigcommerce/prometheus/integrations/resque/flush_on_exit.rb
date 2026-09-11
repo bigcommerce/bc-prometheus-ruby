@@ -53,13 +53,6 @@ module Bigcommerce
           class << self
             ##
             # Whether the child about to run should flush.
-            # This module is conditionally prepended  . Deciding at install time instead would fix the
-            # answer for the life of the worker. `before_fork` resolves it per job, so a callable can answer differently
-            # each time.
-            #
-            # Resque's loop always fires `before_fork` first to set this value, but `perform` is public and
-            # the deprecated `Resque::Worker#process` reaches it directly.
-            #
             # @return [Boolean]
             #
             attr_accessor :enabled
@@ -67,10 +60,6 @@ module Bigcommerce
             ##
             # The client to drain. The same object `ForkReset` was handed, so what is delivered here is the queue the
             # child was given at fork time.
-            #
-            # `Bigcommerce::Prometheus.client` is the singleton and is not necessarily that object.
-            # `Integrations::Resque.start` accepts a `client:`, and a caller passing one would otherwise have the reset
-            # and the flush working on two different queues.
             #
             # @return [PrometheusExporter::Client]
             #

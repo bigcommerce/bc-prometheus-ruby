@@ -29,13 +29,6 @@ module Bigcommerce
           def start(client: nil)
             resque_client = client || ::Bigcommerce::Prometheus.client
 
-            # Installed ahead of the collectors, and the reset installed whatever the flag below says. Together these are
-            # the safety net for every observation pushed from a forked child, so they must not depend on the collectors
-            # that follow starting successfully. The reset is also what keeps the flush cheap: without it a child would
-            # synchronously re-send the parent's backlog before reaching its own message.
-            #
-            # Both wrap `Resque::Worker#perform`. Which one is prepended first does not matter, since the reset runs
-            # before `super` and the flush after it either way.
             install_fork_reset(resque_client)
             install_flush_on_exit(resque_client)
 
@@ -55,18 +48,7 @@ module Bigcommerce
           private
 
           ##
-          # Hand each forked child a clean client instead of a copy of whatever the parent had not yet drained.
-          #
-          # Installed whatever the per-job flush setting is: Collectors::Resque pushes from the parent every 30 seconds,
-          # so a child can inherit queued messages either way. See `ForkReset` for why this wraps `Worker#perform`
-          # instead of registering an after_fork hook.
-          #
-          # The pid is recorded here because this runs in the worker parent, which makes it the reading every forked
-          # child differs from.
-          #
-          # Idempotent. `Module#prepend` ignores a module already in the ancestors, and a second call assigns the same
-          # two values.
-          #
+          # Ensure the forked child starts with an empty metrics queue.
           # @param [PrometheusExporter::Client] client
           #
           def install_fork_reset(client)
@@ -78,20 +60,6 @@ module Bigcommerce
           ##
           # Deliver a forked child's own observations before Resque's `exit!` discards them.
           #
-          # Two hooks, because the decision and the delivery happen in different processes. `before_fork` runs in the
-          # parent, so that is where `resque_flush_on_exit_enabled` is resolved, and the child inherits the answer through
-          # the fork itself. `Resque::Worker#perform` is the only in-child boundary that runs after the job body, and it
-          # is a method rather than a hook, hence the prepend.
-          #
-          # Resolving per fork rather than once here is what lets a caller pass a callable and change its mind at
-          # runtime without a restart. Nothing in the child ever evaluates it.
-          #
-          # Idempotent. Resque appends `before_fork` hooks rather than replacing them, so a second call would otherwise
-          # register a second hook.
-          #
-          # Takes the client rather than reaching for the singleton at flush time, so that the queue drained here is the
-          # one `install_fork_reset` cleared. A caller passing `client:` would otherwise get two different queues.
-          #
           # @param [PrometheusExporter::Client] client
           #
           def install_flush_on_exit(client)
@@ -101,14 +69,20 @@ module Bigcommerce
             return log_flush_on_exit_unsupported unless client.respond_to?(:flush!)
 
             FlushOnExit.client = client
+
             ::Resque::Worker.prepend(FlushOnExit)
+
+            # This block runs in the parent, before each fork.
+            # `resque_flush_on_exit_enabled` can be a callable which is evaluated here rather than once at boot.
+            # This means that flushing on exit can be enabled and disabled without a restart of the worker.
             ::Resque.before_fork { |job| FlushOnExit.enabled = should_flush_on_exit?(job) }
+
             @flush_on_exit_installed = true
             log_flush_on_exit_installed
           end
 
           ##
-          # Whether to install at all.
+          # Whether to install FlushOnExit.
           # ::Bigcommerce::Prometheus.resque_flush_on_exit_enabled can be one of three values
           # 1. false: Prometheus metrics will never be flushed at exit
           # 2. true: Prometheus metrics will be flushed at exit
@@ -124,7 +98,7 @@ module Bigcommerce
           ##
           # Resolve whether this child should flush. Runs in the parent, before the fork.
           #
-          # `resque_flush_on_exit_enabled` is either a plain value or something callable. A callable is handed the
+          # `resque_flush_on_exit_enabled` is either a plain value or a callable. A callable is handed the
           # `Resque::Job` when it accepts one, so a caller can decide per job as well as per process.
           # `JobPayload.for(job).job_class` unwraps ActiveJob's payload if the caller wants the real class name.
           #
