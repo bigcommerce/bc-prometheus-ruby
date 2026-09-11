@@ -23,10 +23,8 @@ module Bigcommerce
         # Give a forked child a clean client, before anything in that child can use the one it inherited.
         #
         # The client is a singleton, so `fork` hands the child a copy of the parent's outbound queue while leaving the
-        # thread that would drain it behind. Everything the parent had not yet sent therefore has to be re-sent by the
-        # child, one request each, before it reaches its own observation, and Resque's `exit!` arrives long before that
-        # finishes. Discarding the copy is safe: the parent still holds the originals and sends them on its own
-        # schedule.
+        # thread that would drain it behind. Those messages are the parent's to send, and it still holds them. The
+        # child starts with an empty queue and sends only what its own job observes.
         #
         # Wraps `Resque::Worker#perform` rather than registering a `Resque.after_fork` hook. A hook works, but
         # `Resque.after_fork` appends and `Resque::Worker#run_hook` runs hooks in registration order, so an application
