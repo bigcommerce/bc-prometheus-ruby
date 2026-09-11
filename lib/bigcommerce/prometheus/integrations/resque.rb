@@ -37,7 +37,7 @@ module Bigcommerce
             # Both wrap `Resque::Worker#perform`. Which one is prepended first does not matter, since the reset runs
             # before `super` and the flush after it either way.
             install_fork_reset(resque_client)
-            install_fork_exit_flush(resque_client)
+            install_flush_on_exit(resque_client)
 
             ::PrometheusExporter::Instrumentation::Process.start(
               client: resque_client,
@@ -79,7 +79,7 @@ module Bigcommerce
           # Deliver a forked child's own observations before Resque's `exit!` discards them.
           #
           # Two hooks, because the decision and the delivery happen in different processes. `before_fork` runs in the
-          # parent, so that is where `resque_fork_exit_flush_enabled` is resolved, and the child inherits the answer through
+          # parent, so that is where `resque_flush_on_exit_enabled` is resolved, and the child inherits the answer through
           # the fork itself. `Resque::Worker#perform` is the only in-child boundary that runs after the job body, and it
           # is a method rather than a hook, hence the prepend.
           #
@@ -94,28 +94,37 @@ module Bigcommerce
           #
           # @param [PrometheusExporter::Client] client
           #
-          def install_fork_exit_flush(client)
-            return if @fork_exit_flush_installed
-            return log_fork_exit_flush_off unless ::Bigcommerce::Prometheus.resque_fork_exit_flush_enabled
+          def install_flush_on_exit(client)
+            return if @flush_on_exit_installed
+            return log_flush_on_exit_off unless flush_on_exit_possible?
 
-            # Asked once here rather than only per job. `ForkExitFlush.flush` checks too, but deliberately says
-            # nothing, because it runs inside an `ensure` where raising would replace whatever the job was
-            # already raising. That leaves a caller who passes an unsupported client with no signal at all.
-            # Boot is the one place a complaint is safe. It is the long-lived parent, once, well away from any
-            # job's exception handling.
-            return log_fork_exit_flush_unsupported unless client.respond_to?(:flush!)
+            return log_flush_on_exit_unsupported unless client.respond_to?(:flush!)
 
-            ForkExitFlush.client = client
-            ::Resque::Worker.prepend(ForkExitFlush)
-            ::Resque.before_fork { |job| ForkExitFlush.enabled = resolve_fork_exit_flush(job) }
-            @fork_exit_flush_installed = true
-            log_fork_exit_flush_installed
+            FlushOnExit.client = client
+            ::Resque::Worker.prepend(FlushOnExit)
+            ::Resque.before_fork { |job| FlushOnExit.enabled = should_flush_on_exit?(job) }
+            @flush_on_exit_installed = true
+            log_flush_on_exit_installed
+          end
+
+          ##
+          # Whether to install at all.
+          # ::Bigcommerce::Prometheus.resque_flush_on_exit_enabled can be one of three values
+          # 1. false: Prometheus metrics will never be flushed at exit
+          # 2. true: Prometheus metrics will be flushed at exit
+          # 3. callable: Whether Prometheus metrics will be flushed at exit is decided on a job by job basis depending
+          #   on the result of the callable. This is useful for a LaunchDarkly experiment evaluation.
+          # @return [Boolean]
+          #
+          def flush_on_exit_possible?
+            setting = ::Bigcommerce::Prometheus.resque_flush_on_exit_enabled
+            setting.respond_to?(:call) || !!setting
           end
 
           ##
           # Resolve whether this child should flush. Runs in the parent, before the fork.
           #
-          # `resque_fork_exit_flush_enabled` is either a plain value or something callable. A callable is handed the
+          # `resque_flush_on_exit_enabled` is either a plain value or something callable. A callable is handed the
           # `Resque::Job` when it accepts one, so a caller can decide per job as well as per process.
           # `JobPayload.for(job).job_class` unwraps ActiveJob's payload if the caller wants the real class name.
           #
@@ -126,8 +135,8 @@ module Bigcommerce
           # @param [Resque::Job] job
           # @return [Boolean]
           #
-          def resolve_fork_exit_flush(job)
-            setting = ::Bigcommerce::Prometheus.resque_fork_exit_flush_enabled
+          def should_flush_on_exit?(job)
+            setting = ::Bigcommerce::Prometheus.resque_flush_on_exit_enabled
             return !!setting unless setting.respond_to?(:call)
 
             # Procs answer `arity` themselves. An object with a `#call` method does not, and asking `method(:call).arity`
@@ -138,7 +147,7 @@ module Bigcommerce
             !!(arity.zero? ? setting.call : setting.call(job))
           rescue StandardError => e
             ::Bigcommerce::Prometheus.logger&.warn(
-              "[bigcommerce-prometheus] resque fork exit flush check failed, not flushing this job: #{e}"
+              "[bigcommerce-prometheus] resque flush on exit check failed, not flushing this job: #{e}"
             )
             false
           end
@@ -152,34 +161,32 @@ module Bigcommerce
           # worker boot of every service would only teach people to ignore warnings. Said out loud anyway, because a
           # metric that never arrives is otherwise indistinguishable from one that was never recorded.
           #
-          def log_fork_exit_flush_off
+          def log_flush_on_exit_off
             ::Bigcommerce::Prometheus.logger&.info(
-              '[bigcommerce-prometheus] resque fork exit flush is off, so metrics recorded inside a job are only ' \
-              'delivered if the background thread runs before the child exits; set ' \
-              'PROMETHEUS_RESQUE_FORK_EXIT_FLUSH_ENABLED=1 to deliver them reliably, at the cost of one request ' \
-              'per observation a job records'
+              '[bigcommerce-prometheus] resque flush on exit is off, so metrics recorded inside a job are only ' \
+                'delivered if the background thread runs before the child exits; set ' \
+                'PROMETHEUS_RESQUE_FLUSH_ON_EXIT_ENABLED=1 to deliver them reliably, at the cost of one request ' \
+                'per observation a job records'
             )
           end
 
           ##
           # Warn rather than info. Unlike the setting being off, this is a configuration mistake: the caller asked
-          # for the flush and cannot have it.
+          # for the flush, but it passed a client which doesn't implement flush!.
           #
-          def log_fork_exit_flush_unsupported
+          def log_flush_on_exit_unsupported
             ::Bigcommerce::Prometheus.logger&.warn(
-              '[bigcommerce-prometheus] resque fork exit flush is enabled but the client does not support flush!, ' \
-              'so nothing is flushed before a child exits; metrics recorded inside a job are only delivered if ' \
-              'the background thread runs first'
+              '[bigcommerce-prometheus] resque flush on exit is enabled but the client does not support flush!.'
             )
           end
 
-          def log_fork_exit_flush_installed
-            dynamic = ::Bigcommerce::Prometheus.resque_fork_exit_flush_enabled.respond_to?(:call)
+          def log_flush_on_exit_installed
+            dynamic = ::Bigcommerce::Prometheus.resque_flush_on_exit_enabled.respond_to?(:call)
             resolution = dynamic ? 'resolved in the parent before every fork' : 'enabled for every job'
 
             ::Bigcommerce::Prometheus.logger&.info(
-              "[bigcommerce-prometheus] resque fork exit flush installed, #{resolution}; a job that pushes metrics " \
-              'delivers them before the child exits'
+              "[bigcommerce-prometheus] resque flush on exit installed, #{resolution}; a job that pushes metrics " \
+                'delivers them before the child exits'
             )
           end
         end
