@@ -45,19 +45,16 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExit do
   let(:job) { double('Resque::Job') }
 
   before do
-    @original_enabled = described_class.enabled
     @original_client = described_class.client
     described_class.client = client
   end
 
   after do
-    described_class.enabled = @original_enabled
     described_class.client = @original_client
   end
 
-  context 'when the parent enabled it for this fork' do
-    before { described_class.enabled = true }
-
+  # Being prepended at all is what enables the flush, so every example here is already the enabled case.
+  context 'when the worker forks per job' do
     it 'delivers what the job recorded before the child exits' do
       worker.perform(job)
       expect(client).to have_received(:flush!)
@@ -95,20 +92,8 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExit do
     end
   end
 
-  context 'when the parent disabled it for this fork' do
-    before { described_class.enabled = false }
-
-    it 'delivers nothing, so a caller that has turned it off pays nothing' do
-      worker.perform(job)
-      expect(client).not_to have_received(:flush!)
-    end
-  end
-
   context 'when the worker does not fork per job' do
-    before do
-      described_class.enabled = true
-      worker.fork_per_job = false
-    end
+    before { worker.fork_per_job = false }
 
     it 'leaves delivery to the background thread, since the process is long-lived' do
       worker.perform(job)

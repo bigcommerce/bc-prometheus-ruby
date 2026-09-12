@@ -44,19 +44,11 @@ module Bigcommerce
         # The flush is opt-in as it adds additional latency to the job by sending the remaining metrics prior to exit, albeit bounded by an aggressive timeout.
         # The opt-in mechanism is via the env var PROMETHEUS_RESQUE_FLUSH_ON_EXIT_ENABLED which in turns sets `resque_flush_on_exit_enabled`
         # As with the other settings, it can be overridden by an assignment.
-        # This can also be a callable, which is evaluated before every fork rather than once at boot, so a caller can
-        # decide per job. See `Integrations::Resque.should_flush_on_exit?`.
+        # `FlushOnExitInstaller` reads it once at boot and only prepends this module when it is truthy, so there is no
+        # flag to check here.
         #
         module FlushOnExit
-          @enabled = false
-
           class << self
-            ##
-            # Whether the child about to run should flush.
-            # @return [Boolean]
-            #
-            attr_accessor :enabled
-
             ##
             # The client to drain. The same object `ForkReset` was handed, so what is delivered here is the queue the
             # child was given at fork time.
@@ -78,7 +70,7 @@ module Bigcommerce
           def perform(job, &block)
             super
           ensure
-            FlushOnExit.flush if fork_per_job? && FlushOnExit.enabled
+            FlushOnExit.flush if fork_per_job?
           end
         end
       end

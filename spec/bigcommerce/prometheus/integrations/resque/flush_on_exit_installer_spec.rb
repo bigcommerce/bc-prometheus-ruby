@@ -52,18 +52,12 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExitInstaller do
     let(:logger) { instance_double(Logger, warn: nil, info: nil) }
     let(:client) { instance_double(PrometheusExporter::Client) }
 
-    # Resque is not loaded here, so the constants the install touches are stubbed, as job_metrics_spec does.
+    # Resque is not loaded here, so the constant the install touches is stubbed, as job_metrics_spec does.
     let(:worker_class) { Class.new }
-    let(:resque_module) do
-      Module.new do
-        def self.before_fork(&block); end
-      end
-    end
 
     before do
       allow(Bigcommerce::Prometheus).to receive(:logger).and_return(logger)
       allow(worker_class).to receive(:prepend)
-      stub_const('Resque', resque_module)
       stub_const('Resque::Worker', worker_class)
       Bigcommerce::Prometheus.resque_flush_on_exit_enabled = true
     end
@@ -84,41 +78,33 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExitInstaller do
 
       expect(worker_class).to have_received(:prepend)
     end
-
-    it 'reports how the decision will be made, so the log distinguishes a flag from a flat setting' do
-      Bigcommerce::Prometheus.resque_flush_on_exit_enabled = -> { true }
-      described_class.new(client: instance_double(Bigcommerce::Prometheus::Client, flush!: nil)).install
-
-      expect(logger).to have_received(:info).with(/resolved in the parent before every fork/)
-    end
   end
 
   describe 'when it has already been installed' do
     let(:logger) { instance_double(Logger, warn: nil, info: nil) }
     let(:client) { instance_double(Bigcommerce::Prometheus::Client, flush!: nil) }
-
-    # `prepend` is idempotent, but `Resque.before_fork` appends another hook every time it is called, so a second
-    # install would resolve the setting twice per fork.
     let(:worker_class) do
       Class.new.tap { |klass| klass.prepend(Bigcommerce::Prometheus::Integrations::Resque::FlushOnExit) }
-    end
-    let(:resque_module) do
-      Module.new do
-        def self.before_fork(&block); end
-      end
     end
 
     before do
       allow(Bigcommerce::Prometheus).to receive(:logger).and_return(logger)
-      stub_const('Resque', resque_module)
       stub_const('Resque::Worker', worker_class)
-      allow(resque_module).to receive(:before_fork)
       Bigcommerce::Prometheus.resque_flush_on_exit_enabled = true
     end
 
-    it 'does not register a second before_fork hook' do
+    # `prepend` is idempotent, so the chain would survive a second install either way. What the guard protects is the
+    # boot log, and the client the first install chose.
+    it 'says nothing a second time, so one boot logs one line' do
       described_class.new(client: client).install
-      expect(resque_module).not_to have_received(:before_fork)
+      expect(logger).not_to have_received(:info)
+    end
+
+    it 'keeps the client the first install was given' do
+      original = Bigcommerce::Prometheus::Integrations::Resque::FlushOnExit.client
+      described_class.new(client: client).install
+
+      expect(Bigcommerce::Prometheus::Integrations::Resque::FlushOnExit.client).to be original
     end
   end
 end

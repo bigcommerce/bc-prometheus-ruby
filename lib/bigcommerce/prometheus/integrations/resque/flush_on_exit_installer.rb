@@ -22,8 +22,9 @@ module Bigcommerce
         ##
         # Wires `FlushOnExit` into Resque, or explains in the log why it did not.
         #
-        # Two things get installed, because the decision and the delivery happen in different processes. See
-        # `FlushOnExit` for what the delivery does and why it is needed at all.
+        # `resque_flush_on_exit_enabled` is read once, here. The module is prepended only when it is truthy, so being
+        # in the ancestor chain is what "enabled" means and there is no flag for the child to consult. See
+        # `FlushOnExit` for what the flush does and why it is needed at all.
         #
         class FlushOnExitInstaller
           ##
@@ -31,7 +32,6 @@ module Bigcommerce
           #
           def initialize(client:)
             @client = client
-            @setting = FlushOnExitSetting.current
           end
 
           ##
@@ -41,16 +41,11 @@ module Bigcommerce
           #
           def install
             return if installed?
-            return log_disabled unless @setting.possible?
+            return log_disabled unless ::Bigcommerce::Prometheus.resque_flush_on_exit_enabled
             return log_unsupported unless @client.respond_to?(:flush!)
 
             FlushOnExit.client = @client
             ::Resque::Worker.prepend(FlushOnExit)
-
-            # This block runs in the parent, before each fork.
-            # `resque_flush_on_exit_enabled` can be a callable, and it is called here rather than read once at boot.
-            # This means that flushing on exit can be enabled and disabled without a restart of the worker.
-            ::Resque.before_fork { |job| FlushOnExit.enabled = FlushOnExitSetting.current.resolve(job) }
 
             log_installed
           end
@@ -58,8 +53,9 @@ module Bigcommerce
           private
 
           ##
-          # Asked of the ancestor chain rather than tracked in a flag, because the chain is the thing that would be
-          # wrong if this ran twice. `prepend` is idempotent, but `Resque.before_fork` appends a second hook.
+          # `prepend` is idempotent, so a second install would leave the ancestor chain as it already is. What the
+          # guard stops is a second boot log, and a second client replacing the one the first install chose. The
+          # chain answers this without a flag to keep in sync.
           #
           # @return [Boolean]
           #
@@ -103,11 +99,9 @@ module Bigcommerce
           # @return [void]
           #
           def log_installed
-            resolution = @setting.dynamic? ? 'resolved in the parent before every fork' : 'enabled for every job'
-
             ::Bigcommerce::Prometheus.logger&.info(
-              "[bigcommerce-prometheus] resque flush on exit installed, #{resolution}; a job that pushes metrics " \
-                'delivers them before the child exits'
+              '[bigcommerce-prometheus] resque flush on exit installed, so a job that pushes metrics delivers them ' \
+                'before the child exits'
             )
           end
         end
