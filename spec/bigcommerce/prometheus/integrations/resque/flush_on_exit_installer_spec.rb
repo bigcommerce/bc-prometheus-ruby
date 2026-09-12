@@ -1,0 +1,124 @@
+# frozen_string_literal: true
+
+# Copyright (c) 2019-present, BigCommerce Pty. Ltd. All rights reserved
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+# documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+# persons to whom the Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
+# Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+# WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+# OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+require 'spec_helper'
+
+describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExitInstaller do
+  around do |example|
+    original = Bigcommerce::Prometheus.resque_flush_on_exit_enabled
+    example.run
+    Bigcommerce::Prometheus.resque_flush_on_exit_enabled = original
+  end
+
+  describe 'when the flush is off' do
+    let(:logger) { instance_double(Logger, info: nil) }
+    let(:client) { instance_double(Bigcommerce::Prometheus::Client) }
+
+    before do
+      allow(Bigcommerce::Prometheus).to receive(:logger).and_return(logger)
+      Bigcommerce::Prometheus.resque_flush_on_exit_enabled = false
+      described_class.new(client: client).install
+    end
+
+    it 'says the flush is off, since a metric that never arrives looks like one never recorded' do
+      expect(logger).to have_received(:info).with(/flush on exit is off/)
+    end
+
+    # The child starts a delivery thread on the first push, and upstream runs its loop once before sleeping. A job
+    # that keeps working after pushing often does get its metric out. A flat "are not delivered" would be false for
+    # those jobs. The bench measures 100 of 200 arriving on a job that pushes, works, then pushes again.
+    it 'does not claim the observations are always lost, because that depends on the job' do
+      expect(logger).to have_received(:info).with(/only delivered if the background thread runs/)
+    end
+  end
+
+  describe 'with a client that cannot flush' do
+    # `Integrations::Resque.start` accepts any client, so a plain `PrometheusExporter::Client` can reach here. It has
+    # no `flush!`. The per-job path stays silent about that on purpose, which left this case with no signal at all.
+    let(:logger) { instance_double(Logger, warn: nil, info: nil) }
+    let(:client) { instance_double(PrometheusExporter::Client) }
+
+    # Resque is not loaded here, so the constants the install touches are stubbed, as job_metrics_spec does.
+    let(:worker_class) { Class.new }
+    let(:resque_module) do
+      Module.new do
+        def self.before_fork(&block); end
+      end
+    end
+
+    before do
+      allow(Bigcommerce::Prometheus).to receive(:logger).and_return(logger)
+      allow(worker_class).to receive(:prepend)
+      stub_const('Resque', resque_module)
+      stub_const('Resque::Worker', worker_class)
+      Bigcommerce::Prometheus.resque_flush_on_exit_enabled = true
+    end
+
+    it 'says so at boot, which is the only place the caller is told' do
+      described_class.new(client: client).install
+      expect(logger).to have_received(:warn).with(/does not support flush!/)
+    end
+
+    it 'does not wire up a flush that cannot run' do
+      described_class.new(client: client).install
+      expect(worker_class).not_to have_received(:prepend)
+    end
+
+    it 'leaves itself uninstalled, so a later call with a usable client still works' do
+      described_class.new(client: client).install
+      described_class.new(client: instance_double(Bigcommerce::Prometheus::Client, flush!: nil)).install
+
+      expect(worker_class).to have_received(:prepend)
+    end
+
+    it 'reports how the decision will be made, so the log distinguishes a flag from a flat setting' do
+      Bigcommerce::Prometheus.resque_flush_on_exit_enabled = -> { true }
+      described_class.new(client: instance_double(Bigcommerce::Prometheus::Client, flush!: nil)).install
+
+      expect(logger).to have_received(:info).with(/resolved in the parent before every fork/)
+    end
+  end
+
+  describe 'when it has already been installed' do
+    let(:logger) { instance_double(Logger, warn: nil, info: nil) }
+    let(:client) { instance_double(Bigcommerce::Prometheus::Client, flush!: nil) }
+
+    # `prepend` is idempotent, but `Resque.before_fork` appends another hook every time it is called, so a second
+    # install would resolve the setting twice per fork.
+    let(:worker_class) do
+      Class.new.tap { |klass| klass.prepend(Bigcommerce::Prometheus::Integrations::Resque::FlushOnExit) }
+    end
+    let(:resque_module) do
+      Module.new do
+        def self.before_fork(&block); end
+      end
+    end
+
+    before do
+      allow(Bigcommerce::Prometheus).to receive(:logger).and_return(logger)
+      stub_const('Resque', resque_module)
+      stub_const('Resque::Worker', worker_class)
+      allow(resque_module).to receive(:before_fork)
+      Bigcommerce::Prometheus.resque_flush_on_exit_enabled = true
+    end
+
+    it 'does not register a second before_fork hook' do
+      described_class.new(client: client).install
+      expect(resque_module).not_to have_received(:before_fork)
+    end
+  end
+end
