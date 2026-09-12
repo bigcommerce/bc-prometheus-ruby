@@ -20,11 +20,13 @@ module Bigcommerce
     module Integrations
       class Resque
         ##
-        # Wires `FlushOnExit` into Resque, or explains in the log why it did not.
+        # Wires `FlushOnExit` into Resque, or logs why it did not.
         #
-        # `resque_flush_on_exit_enabled` is read once, here. The module is prepended only when it is truthy, so being
-        # in the ancestor chain is what "enabled" means and there is no flag for the child to consult. See
-        # `FlushOnExit` for what the flush does and why it is needed at all.
+        # Reads `resque_flush_on_exit_enabled` once, at boot, and prepends `FlushOnExit` to `Resque::Worker` only
+        # when it is true. Nothing reads the setting again. A forked child either finds the module in its ancestor
+        # chain and flushes, or does not find it and returns as it always did.
+        #
+        # See `FlushOnExit` for what the flush does and why it is needed at all.
         #
         class FlushOnExitInstaller
           ##
@@ -35,8 +37,6 @@ module Bigcommerce
           end
 
           ##
-          # Install, unless the setting says not to, the client cannot flush, or this already ran.
-          #
           # @return [void]
           #
           def install
@@ -53,10 +53,6 @@ module Bigcommerce
           private
 
           ##
-          # `prepend` is idempotent, so a second install would leave the ancestor chain as it already is. What the
-          # guard stops is a second boot log, and a second client replacing the one the first install chose. The
-          # chain answers this without a flag to keep in sync.
-          #
           # @return [Boolean]
           #
           def installed?
@@ -64,29 +60,13 @@ module Bigcommerce
           end
 
           ##
-          # Hedged deliberately. The child starts a delivery thread on the first push, and upstream runs its loop
-          # once before sleeping. A job that keeps working after pushing often does get its metric out. What the
-          # flush adds is reliability rather than delivery.
-          #
-          # Info rather than warn: this is the default, and it is what every caller already had. A warning on every
-          # worker boot of every service would only teach people to ignore warnings. Said out loud anyway, because a
-          # metric that never arrives is otherwise indistinguishable from one that was never recorded.
-          #
           # @return [void]
           #
           def log_disabled
-            ::Bigcommerce::Prometheus.logger&.info(
-              '[bigcommerce-prometheus] resque flush on exit is off, so metrics recorded inside a job are only ' \
-                'delivered if the background thread runs before the child exits; set ' \
-                'PROMETHEUS_RESQUE_FLUSH_ON_EXIT_ENABLED=1 to deliver them reliably, at the cost of one request ' \
-                'per observation a job records'
-            )
+            ::Bigcommerce::Prometheus.logger&.info('[bigcommerce-prometheus] resque flush on exit is disabled')
           end
 
           ##
-          # Warn rather than info. Unlike the setting being off, this is a configuration mistake: the caller asked
-          # for the flush, but it passed a client which doesn't implement flush!.
-          #
           # @return [void]
           #
           def log_unsupported
@@ -99,10 +79,7 @@ module Bigcommerce
           # @return [void]
           #
           def log_installed
-            ::Bigcommerce::Prometheus.logger&.info(
-              '[bigcommerce-prometheus] resque flush on exit installed, so a job that pushes metrics delivers them ' \
-                'before the child exits'
-            )
+            ::Bigcommerce::Prometheus.logger&.info('[bigcommerce-prometheus] resque flush on exit installed.')
           end
         end
       end

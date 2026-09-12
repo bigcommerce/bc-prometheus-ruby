@@ -323,4 +323,32 @@ describe Bigcommerce::Prometheus::Delivery do
       expect(delivery_mutex).not_to be_locked
     end
   end
+
+  # A mutex held by a thread that dies is released by the VM, so a stopped flush cannot strand the delivery lock.
+  # The whole design rests on that: if a timed-out flush kept the lock, every later flush in the process would give
+  # up waiting for it.
+  #
+  # The case above stubs `attempt_flush`, so the lock is never taken and nothing is stranded either way. Here only
+  # the send is stubbed, so the real `deliver_before` takes the lock and is still holding it when the budget
+  # expires and the thread is stopped.
+  describe '#flush! when the thread is stopped while it holds the delivery lock' do
+    before do
+      allow(delivery).to receive(:post_message) { sleep 5 }
+      queue << 'queued_message'
+    end
+
+    it 'reports :timeout' do
+      expect(delivery.flush!).to eq :timeout
+    end
+
+    it 'releases the delivery lock, so the next flush is not locked out by a thread that no longer exists' do
+      delivery.flush!
+
+      # Stopping a thread only schedules its unwind, so `flush!` can return before the lock has come back.
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 2
+      sleep 0.001 while delivery_mutex.locked? && Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+
+      expect(delivery_mutex).not_to be_locked
+    end
+  end
 end

@@ -18,17 +18,20 @@
 module Bigcommerce
   module Prometheus
     ##
-    # Take what the client has queued and get it to the collector.
+    # Sends the queued metrics to the collector.
+    # This class has two clients
+    # 1. The background thread which periodically wakes up and calls `process_queue` and is in no hurry, since nothing is waiting on it.
+    # 2. A forked Resque child is about to exit and calls `flush!` on its own thread. It has very little time, since Resque's `exit!` is moments away and destroys anything still queued.
     #
-    # Two callers reach here and they want different things. The client's background thread calls `process_queue` and
-    # is in no hurry, since nothing is waiting on it. A forked Resque child calls `flush!` on its own thread and has
-    # very little time, since Resque's `exit!` is moments away and destroys anything still queued.
+    # Both go through the same `drain`, which is the point of this class.
+    # The difference between them is that the flush on exit is bounded by a parametrized deadline, so that a job
+    # waits a known amount on the metrics pipeline rather than however long the collector takes.
     #
-    # Both go through the same `drain`, which is the point of this class. The difference between them is one argument,
-    # a deadline, rather than two delivery paths that could drift apart.
+    # Metric delivery is serialized on `@delivery_mutex` so only one thread is ever sending.
     #
-    # Serialised on `@delivery_mutex` so only one thread is ever delivering. Without it either caller could return
-    # while the other still had a message in flight, which for the child means returning just in time to be killed.
+    # A sending thread pops a message off the queue before it sends it, so the queue can be empty while a
+    # request is still in flight. Without the mutex, `flush!` would find that empty queue and report itself
+    # done while the background thread was still sending. Resque's `exit!` would then destroy that request.
     #
     class Delivery
       include Loggable
@@ -40,11 +43,12 @@ module Bigcommerce
       MINIMUM_ATTEMPT_SECONDS = 0.001
 
       ##
-      # @param [Queue] queue the client's own queue, not a copy. Whatever the client pushes onto after this is
-      #   constructed is what gets delivered, which is why a fork replaces the client's queue and this object together.
+      # @param [Queue] queue a reference to the data structure that metrics are pushed onto. Whatever metrics
+      #   are pushed onto this queue will be delivered.
       # @param [String] host
       # @param [Integer] port
-      # @param [Float] flush_timeout total budget for a `flush!`, across every message it sends
+      # @param [Float] flush_timeout total budget for a `flush!`, covering the wait for the delivery lock as well
+      #   as every message it sends
       # @param [String] process_name named in every warning, so a child's warnings can be told from the parent's
       #
       def initialize(queue:, host:, port:, flush_timeout:, process_name:)
@@ -57,7 +61,7 @@ module Bigcommerce
       end
 
       ##
-      # Send everything queued, taking as long as it takes.
+      # Send everything queued, with no timeout.
       #
       # The background thread's entry point. It waits for the lock rather than giving up on one, and passes no
       # deadline, because nothing is held up by it finishing late.
@@ -67,9 +71,11 @@ module Bigcommerce
       end
 
       ##
-      # Send everything queued within the flush timeout, and say so if anything is left.
+      # Send everything queued within the flush timeout, and log the fact if it times out with metrics still on the queue it didn't have time to deliver.
       #
-      # Never raises. A lost metric must not fail the work that produced it, so everything is reported and swallowed.
+      # Never raises. A lost metric must not fail the work that produced it, so an error from any delivery
+      # attempt is logged and returned as `:error` rather than propagated. Exhausting the budget does not
+      # raise in the first place, and returns `:timeout`.
       #
       # @return [Symbol] one of :empty, :success, :timeout, :error
       #
@@ -82,14 +88,14 @@ module Bigcommerce
       private
 
       ##
-      # Run the flush on a thread we can stop, and take the budget back if it overruns.
+      # Run the flush on a new thread and wait for it with `join(@flush_timeout)`, so the deadline is enforced
+      # from outside the delivery. If the thread has not finished before the timeout expires, it is killed and `:timeout` returned.
       #
-      # `Net::HTTP` bounds each phase of a request separately rather than the request as a whole. Per-phase
-      # timeouts alone therefore let one slow message overrun the budget several times over. Stopping a
-      # thread is what holds the wall clock to the number that was configured.
+      # `Net::HTTP`'s own timeouts do not cover a whole request and response, so they cannot bound the flush.
+      # Stopping the thread at the deadline is what puts a total bound on delivering the metrics.
       #
-      # `Thread#kill` runs ensure blocks, so the delivery lock is released rather than left held by a
-      # thread that no longer exists.
+      # A mutex held by a thread that dies is released by the VM, so stopping the thread here cannot strand the
+      # delivery lock and lock out every later flush in this process.
       #
       # @return [Symbol]
       #
@@ -110,9 +116,6 @@ module Bigcommerce
       end
 
       ##
-      # Take the delivery lock, send what is queued, and give the lock back. Gives up rather than queueing behind a
-      # delivery that will not finish in time.
-      #
       # @param [Float] deadline monotonic clock reading to stop by
       # @return [Symbol]
       #
@@ -163,14 +166,10 @@ module Bigcommerce
       ##
       # Post a single message.
       #
-      # A flush passes the time it has left. An unhealthy collector then costs a job a known amount,
-      # rather than however long the network takes to give up.
+      # A flush passes the time it has left. An unhealthy collector then costs a job a known amount of time,
+      # rather than waiting for `Net::HTTP` to time out.
       #
-      # Each phase is capped at the whole remaining budget rather than a share of it, because the flush is
-      # bounded as a whole by `attempt_flush_within_budget`. A phase that stalls is stopped there.
-      #
-      # The background thread passes nothing, so `Net::HTTP`'s own 60 second defaults apply. Nothing waits
-      # on that thread, and those are the timeouts this gem has always delivered under.
+      # The background thread passes nothing, so `Net::HTTP`'s own timeouts apply.
       #
       # @param [String] message
       # @param [Float|NilClass] timeout caps each phase of this request when given
@@ -197,17 +196,11 @@ module Bigcommerce
         undelivered = @queue.size
         return report_abandoned(undelivered) if undelivered.positive?
 
-        # `drain` reports the one message it was carrying when it failed, and re-raises. Anything still behind that
-        # message is reported above, since it is just as lost. There is nothing left to say once the queue is empty:
-        # nothing was in flight, so the message below would be a false claim.
         return if outcome == :error
 
-        # Nothing queued, and still not a success. The background thread had already taken the message off the queue
-        # and was sending it, which is why the lock could not be acquired. `@queue.size` cannot see that message, so
-        # counting the queue alone would report this as nothing lost, in the one case where something is.
         report(
           "gave up after #{flush_timeout_ms}ms waiting for an in-flight send to #{uri_path('/send-metrics')}; " \
-          'anything it was carrying is lost with this process'
+            'anything it was carrying is lost with this process'
         )
       end
 
@@ -217,7 +210,7 @@ module Bigcommerce
       def report_abandoned(undelivered)
         report(
           "abandoned #{undelivered} metric(s) after #{flush_timeout_ms}ms: " \
-          "#{uri_path('/send-metrics')} did not accept them in time"
+            "#{uri_path('/send-metrics')} did not accept them in time"
         )
       end
 

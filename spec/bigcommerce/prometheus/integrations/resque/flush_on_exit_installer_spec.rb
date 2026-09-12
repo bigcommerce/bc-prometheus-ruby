@@ -34,15 +34,8 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExitInstaller do
       described_class.new(client: client).install
     end
 
-    it 'says the flush is off, since a metric that never arrives looks like one never recorded' do
-      expect(logger).to have_received(:info).with(/flush on exit is off/)
-    end
-
-    # The child starts a delivery thread on the first push, and upstream runs its loop once before sleeping. A job
-    # that keeps working after pushing often does get its metric out. A flat "are not delivered" would be false for
-    # those jobs. The bench measures 100 of 200 arriving on a job that pushes, works, then pushes again.
-    it 'does not claim the observations are always lost, because that depends on the job' do
-      expect(logger).to have_received(:info).with(/only delivered if the background thread runs/)
+    it 'says the flush is disabled, since a metric that never arrives looks like one never recorded' do
+      expect(logger).to have_received(:info).with(/resque flush on exit is disabled/)
     end
   end
 
@@ -64,7 +57,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExitInstaller do
 
     it 'says so at boot, which is the only place the caller is told' do
       described_class.new(client: client).install
-      expect(logger).to have_received(:warn).with(/does not support flush!/)
+      expect(logger).to have_received(:warn).with(/resque flush on exit is enabled/)
     end
 
     it 'does not wire up a flush that cannot run' do
@@ -77,6 +70,31 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExitInstaller do
       described_class.new(client: instance_double(Bigcommerce::Prometheus::Client, flush!: nil)).install
 
       expect(worker_class).to have_received(:prepend)
+    end
+
+  end
+
+  describe 'with a client that can flush' do
+    let(:logger) { instance_double(Logger, warn: nil, info: nil) }
+    let(:client) { instance_double(Bigcommerce::Prometheus::Client, flush!: nil) }
+
+    # Resque is not loaded here, so the constant the install touches is stubbed, as job_metrics_spec does.
+    let(:worker_class) { Class.new }
+
+    before do
+      allow(Bigcommerce::Prometheus).to receive(:logger).and_return(logger)
+      allow(worker_class).to receive(:prepend)
+      stub_const('Resque::Worker', worker_class)
+      Bigcommerce::Prometheus.resque_flush_on_exit_enabled = true
+      described_class.new(client: client).install
+    end
+
+    it 'wires the flush into the worker' do
+      expect(worker_class).to have_received(:prepend)
+    end
+
+    it 'says so at boot, so the flush being active is visible in the log' do
+      expect(logger).to have_received(:info).with(/resque flush on exit installed/)
     end
   end
 
