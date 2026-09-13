@@ -42,6 +42,7 @@ module Bigcommerce
         )
         PrometheusExporter::Client.default = self
         @process_name = process_name || ::Bigcommerce::Prometheus.process_name
+        @delivery = build_delivery
       end
 
       ##
@@ -66,7 +67,7 @@ module Bigcommerce
       # @return [Module<URI>]
       #
       def uri_path(path)
-        URI("http://#{@host}:#{@port}#{path}")
+        @delivery.uri_path(path)
       end
 
       ##
@@ -81,15 +82,21 @@ module Bigcommerce
       # Process the current queue and flush to the collector
       #
       def process_queue
-        while @queue.length.to_i.positive?
-          begin
-            message = @queue.pop
-            Net::HTTP.post(uri_path('/send-metrics'), message)
-          rescue StandardError => e
-            logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter is dropping a message to #{uri_path('/send-metrics')}: #{e}"
-            raise
-          end
-        end
+        @delivery.process_queue
+      end
+
+      private
+
+      ##
+      # @return [Bigcommerce::Prometheus::Delivery]
+      #
+      def build_delivery
+        Delivery.new(
+          queue: @queue,
+          host: @host,
+          port: @port,
+          process_name: @process_name
+        )
       end
     end
   end

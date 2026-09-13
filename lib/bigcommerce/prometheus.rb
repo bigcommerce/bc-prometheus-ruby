@@ -29,6 +29,7 @@ require_relative 'prometheus/version'
 require_relative 'prometheus/loggable'
 require_relative 'prometheus/configuration'
 require_relative 'prometheus/server'
+require_relative 'prometheus/delivery'
 require_relative 'prometheus/client'
 
 require_relative 'prometheus/collectors/base'

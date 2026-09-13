@@ -20,6 +20,8 @@ require 'spec_helper'
 describe Bigcommerce::Prometheus::Client do
   let(:client) { described_class.instance }
 
+  let(:delivery) { client.instance_variable_get(:@delivery) }
+
   describe '#initialize' do
     subject { client }
 
@@ -53,6 +55,20 @@ describe Bigcommerce::Prometheus::Client do
       it 'sends a message to the Prometheus server' do
         expect { client.send('test_message') }.not_to change(client.instance_variable_get(:@queue), :size)
       end
+    end
+  end
+
+  describe '#process_queue' do
+    it 'delegates to the delivery, which owns the path to the collector' do
+      allow(delivery).to receive(:process_queue)
+      client.process_queue
+      expect(delivery).to have_received(:process_queue)
+    end
+  end
+
+  describe '#uri_path' do
+    it 'answers the collector URL the delivery would post to' do
+      expect(client.uri_path('/send-metrics')).to eq delivery.uri_path('/send-metrics')
     end
   end
 end
