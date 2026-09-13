@@ -62,14 +62,14 @@ module Bigcommerce
       end
 
       ##
-      # @param [String] message the serialized metric to deliver.
+      # @param [String] message
       #
       def post_message(message)
         ::Net::HTTP.post(uri_path('/send-metrics'), message)
       end
 
       ##
-      # @param [String] message the warning to write.
+      # @param [String] message
       #
       def report(message)
         logger.warn "[bigcommerce-prometheus][#{@process_name}] #{message}"

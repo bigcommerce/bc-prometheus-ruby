@@ -19,7 +19,6 @@ module Bigcommerce
   module Prometheus
     ##
     # Client implementation for Prometheus
-    #
     class Client < ::PrometheusExporter::Client
       include Singleton
       include Loggable
@@ -63,6 +62,8 @@ module Bigcommerce
       end
 
       ##
+      # Build the collector URI for a path, such as '/send-metrics'.
+      # Kept because it was public API before delivery moved out of this class.
       # @param [String] path
       # @return [Module<URI>]
       #
@@ -72,6 +73,7 @@ module Bigcommerce
 
       ##
       # @param [String] str
+      #
       def send(str)
         return unless Bigcommerce::Prometheus.enabled
 
@@ -83,6 +85,16 @@ module Bigcommerce
       #
       def process_queue
         @delivery.process_queue
+      end
+
+      ##
+      # Discard the state a forked child inherited from its parent.
+      #
+      def reset_after_fork!
+        @queue = Queue.new
+        @worker_thread = nil
+        @mutex = Mutex.new
+        @delivery = build_delivery
       end
 
       private

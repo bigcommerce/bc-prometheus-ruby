@@ -1,5 +1,9 @@
 Changelog for the bc-prometheus-ruby gem.
 
+### Pending Release
+
+- Reset the Prometheus client in forked Resque children so the forked job doesn't also send the parent's metrics
+
 ## 0.9.0
 
 - Add `Bigcommerce::Prometheus::Instrumentors::Protorabbit` so protorabbit (RabbitMQ protobuf consumer) processes run an embedded Prometheus exporter server, fixing dropped/refused metric pushes (`Errno::ECONNREFUSED` on `/send-metrics`) from those processes.

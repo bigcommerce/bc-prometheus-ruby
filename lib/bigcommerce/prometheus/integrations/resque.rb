@@ -22,21 +22,46 @@ module Bigcommerce
       # Plugin for resque
       #
       class Resque
-        ##
-        # Start the resque integration
-        #
-        def self.start(client: nil)
-          ::PrometheusExporter::Instrumentation::Process.start(
-            client: client || ::Bigcommerce::Prometheus.client,
-            type: ::Bigcommerce::Prometheus.resque_process_label
-          )
-          ::Bigcommerce::Prometheus::Collectors::Resque.start(
-            client: client || ::Bigcommerce::Prometheus.client,
-            frequency: ::Bigcommerce::Prometheus.resque_collection_frequency
-          )
-          ::Bigcommerce::Prometheus::Integrations::Resque::JobMetrics.start(
-            client: client || ::Bigcommerce::Prometheus.client
-          )
+        class << self
+          def start(client: nil)
+            resque_client = client || ::Bigcommerce::Prometheus.client
+
+            install_fork_reset(resque_client)
+
+            ::PrometheusExporter::Instrumentation::Process.start(
+              client: resque_client,
+              type: ::Bigcommerce::Prometheus.resque_process_label
+            )
+            ::Bigcommerce::Prometheus::Collectors::Resque.start(
+              client: resque_client,
+              frequency: ::Bigcommerce::Prometheus.resque_collection_frequency
+            )
+            ::Bigcommerce::Prometheus::Integrations::Resque::JobMetrics.start(
+              client: resque_client
+            )
+          end
+
+          private
+
+          ##
+          # @param [PrometheusExporter::Client] client
+          #
+          def install_fork_reset(client)
+            return log_reset_unsupported unless client.respond_to?(:reset_after_fork!)
+
+            ForkReset.client = client
+            ForkReset.installed_in_pid = Process.pid
+            ::Resque::Worker.prepend(ForkReset)
+          end
+
+          ##
+          # @return [void]
+          #
+          def log_reset_unsupported
+            ::Bigcommerce::Prometheus.logger&.warn(
+              '[bigcommerce-prometheus] resque fork reset skipped: the client does not support reset_after_fork!.'
+            )
+          end
         end
       end
     end

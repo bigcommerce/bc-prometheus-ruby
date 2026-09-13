@@ -55,6 +55,13 @@ workflows:
           <<: *ruby_3_4_defaults
           name: ruby-3_4-rspec_unit
           db: false
+      - ruby/rspec-unit:
+          <<: *ruby_3_4_defaults
+          name: ruby-3_4-rspec_fork_integration
+          db: false
+          code-climate: false
+          report-code-coverage: false
+          additional_args: "--tag fork_integration spec/integration"
   ruby_4_0:
     jobs:
       - ruby/bundle-audit:
