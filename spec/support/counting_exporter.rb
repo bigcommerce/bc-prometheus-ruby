@@ -22,8 +22,8 @@ require 'socket'
 # Stands in for the exporter server and counts what arrives at /send-metrics.
 #
 # The fork-integration specs assert on how many observations actually crossed the process boundary, so they need a real
-# listener rather than a stubbed client. Counting envelopes here keeps those assertions independent of type collector
-# registration and of the exposition format.
+# listener rather than a stubbed client.
+# It does not process the metrics it receives. It only counts the ones that arrive.
 #
 class CountingExporter
   # @return [Integer] the ephemeral port the exporter bound to

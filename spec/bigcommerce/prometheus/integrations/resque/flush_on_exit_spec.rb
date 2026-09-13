@@ -21,8 +21,12 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExit do
   let(:client) { instance_double(Bigcommerce::Prometheus::Client, flush!: nil) }
   let(:singleton_client) { instance_double(Bigcommerce::Prometheus::Client, flush!: nil) }
 
-  # Stands in for Resque::Worker, which is not loaded here. The prepend only needs `perform` to wrap and
-  # `fork_per_job?` to consult, mirroring how job_metrics_spec covers WorkerInstrumentation.
+  # Stands in for Resque::Worker, which is not loaded here.
+  # `FlushOnExit` wraps `perform` and reads `fork_per_job?`, so the stub defines only those two methods.
+  #
+  # Prepending directly is the enabled case.
+  # The module carries no flag, so in production the installer does this same prepend only when
+  # `resque_flush_on_exit_enabled` is true.
   let(:worker_class) do
     klass = Class.new do
       attr_writer :fork_per_job, :raise_on_perform
@@ -53,7 +57,6 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExit do
     described_class.client = @original_client
   end
 
-  # Being prepended at all is what enables the flush, so every example here is already the enabled case.
   context 'when the worker forks per job' do
     it 'delivers what the job recorded before the child exits' do
       worker.perform(job)
@@ -71,9 +74,8 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExit do
       expect(client).to have_received(:flush!)
     end
 
-    # The queue drained has to be the one ForkReset cleared. Reaching for the singleton instead would deliver a
-    # different queue whenever a caller passed `client:` to `Integrations::Resque.start`, as the fork integration spec
-    # and the bench both do.
+    # `Integrations::Resque.start` accepts a `client:`, so the flush has to drain that client rather than calling
+    # `Bigcommerce::Prometheus.client`.
     it 'delivers the configured client rather than the singleton' do
       allow(Bigcommerce::Prometheus).to receive(:client).and_return(singleton_client)
 
@@ -83,9 +85,9 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExit do
       expect(singleton_client).not_to have_received(:flush!)
     end
 
-    # A caller may hand `Integrations::Resque.start` a plain upstream client, which has no `flush!`. Raising from the
-    # `ensure` that calls this would replace whatever the job was already raising.
-    it 'does nothing rather than raising when the client cannot flush' do
+    # `client` is a public accessor, so it can be reassigned after the installer checked it.
+    # Raising from the `ensure` that calls this would replace whatever the job was already raising.
+    it 'does not raise when the client cannot flush' do
       described_class.client = instance_double(PrometheusExporter::Client)
 
       expect { worker.perform(job) }.not_to raise_error

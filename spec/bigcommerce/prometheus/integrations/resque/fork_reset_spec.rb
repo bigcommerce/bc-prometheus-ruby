@@ -19,8 +19,10 @@ describe Bigcommerce::Prometheus::Integrations::Resque::ForkReset do
   let(:client) { instance_double(Bigcommerce::Prometheus::Client, reset_after_fork!: nil) }
   let(:events) { [] }
 
-  # Stands in for Resque::Worker, which is not loaded here. Its `perform` records the two things it does in the real
-  # one, in the order it does them: the after_fork hooks at worker.rb:345, then the job body at worker.rb:347.
+  # Stands in for Resque::Worker, which is not loaded here.
+  # The `perform` records the two things the real `Resque::Worker#perform` does, in the order it does them:
+  # 1. `run_hook :after_fork`
+  # 2. `job.perform`
   let(:worker_class) do
     recorder = events
     klass = Class.new do
@@ -48,8 +50,9 @@ describe Bigcommerce::Prometheus::Integrations::Resque::ForkReset do
   before { described_class.client = client }
 
   context 'when running in a forked child' do
-    # Any pid but this process's own. Forking for real is what spec/integration/resque_fork_delivery_spec.rb is for;
-    # here the changed pid is the whole condition under test, so it is set directly.
+    # Any pid but this process's own.
+    # spec/integration/resque_fork_delivery_spec.rb performs an actual fork.
+    # Here the changed pid is the whole condition under test, so it is set directly.
     before { described_class.installed_in_pid = Process.pid + 1 }
 
     it 'discards the queue the child inherited from its parent' do
@@ -58,9 +61,9 @@ describe Bigcommerce::Prometheus::Integrations::Resque::ForkReset do
       expect(client).to have_received(:reset_after_fork!)
     end
 
-    # The reason this is a prepend rather than a Resque.after_fork hook. Hooks run in registration order, so one
-    # registered before this integration started would push an observation into the queue that is about to be thrown
-    # away.
+    # The reason this is a prepend rather than a Resque.after_fork hook.
+    # Hooks run in registration order, so one registered before this integration started would push an observation into
+    # the queue that is about to be discarded.
     it 'discards it before the after_fork hooks run, so nothing they record is thrown away' do
       allow(client).to receive(:reset_after_fork!) { events << :reset }
 
@@ -77,8 +80,10 @@ describe Bigcommerce::Prometheus::Integrations::Resque::ForkReset do
   context 'when running in the process that installed it' do
     before { described_class.installed_in_pid = Process.pid }
 
-    # `Worker#perform` runs in the long-lived parent for a FORK_PER_JOB=false worker and via the deprecated
-    # `Worker#process`. Resetting there would throw away messages nobody else is going to send.
+    # `Worker#perform` runs in the long-lived parent in two cases
+    # 1. a FORK_PER_JOB=false worker
+    # 2. via the deprecated `Worker#process`.
+    # Resetting in the parent would discard its queued messages, since without a fork there is no other copy.
     it 'leaves the queue alone, since the parent is still responsible for sending it' do
       worker.perform(job)
 
@@ -105,9 +110,9 @@ describe Bigcommerce::Prometheus::Integrations::Resque::ForkReset do
 
     before { described_class.installed_in_pid = Process.pid + 1 }
 
-    # A caller may hand `Integrations::Resque.start` a plain upstream client, which has no `reset_after_fork!`. That
-    # costs the child the clean queue, but it must not cost it the job.
-    it 'does nothing rather than raising' do
+    # A caller may pass `Integrations::Resque.start` a plain upstream client, which has no `reset_after_fork!`.
+    # That costs the child the clean queue, but it must not cost it the job.
+    it 'does not raise' do
       expect { worker.perform(job) }.not_to raise_error
     end
   end

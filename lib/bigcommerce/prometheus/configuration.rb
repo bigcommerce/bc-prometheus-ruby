@@ -37,9 +37,9 @@ module Bigcommerce
         resque_collection_frequency: ENV.fetch('PROMETHEUS_RESQUE_COLLECTION_FREQUENCY', 30).to_i,
         resque_process_label: ENV.fetch('PROMETHEUS_RESQUE_PROCESS_LABEL', 'resque').to_s,
         resque_per_job_metrics_enabled: ENV.fetch('PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED', 0).to_i.positive?,
-        # Off deliberately, not by oversight. Enabling it adds a synchronous request to every Resque job that records
-        # a metric, so changing this default changes how long other people's jobs take. That is a breaking change and
-        # wants a version bump to match, the way 0.4.0 handled moving the thread pool default from 20 to 3.
+        # This is opt-in. Enabling it adds a synchronous request to every Resque job that records
+        # a metric, so changing this default changes how long other people's jobs take.
+        # That is a breaking change and warrants a version bump to match.
         resque_flush_on_exit_enabled: ENV.fetch('PROMETHEUS_RESQUE_FLUSH_ON_EXIT_ENABLED', 0).to_i.positive?,
 
         # Server configuration

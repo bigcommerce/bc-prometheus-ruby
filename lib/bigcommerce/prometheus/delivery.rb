@@ -21,9 +21,9 @@ module Bigcommerce
     # Sends the queued metrics to the collector.
     # This class has two clients
     # 1. The background thread which periodically wakes up and calls `process_queue` and is in no hurry, since nothing is waiting on it.
-    # 2. A forked Resque child is about to exit and calls `flush!` on its own thread. It has very little time, since Resque's `exit!` is moments away and destroys anything still queued.
+    # 2. A forked Resque child is about to exit and calls `flush!` on its own thread. It has very little time, since Resque's `exit!` follows the job and destroys anything still queued.
     #
-    # Both go through the same `drain`, which is the point of this class.
+    # Both go through the same `drain`, so there is a single path to the collector.
     # The difference between them is that the flush on exit is bounded by a parametrized deadline, so that a job
     # waits a known amount on the metrics pipeline rather than however long the collector takes.
     #
@@ -94,7 +94,7 @@ module Bigcommerce
       # `Net::HTTP`'s own timeouts do not cover a whole request and response, so they cannot bound the flush.
       # Stopping the thread at the deadline is what puts a total bound on delivering the metrics.
       #
-      # A mutex held by a thread that dies is released by the VM, so stopping the thread here cannot strand the
+      # A mutex held by a thread that dies is released by the VM, so killing the worker cannot strand the
       # delivery lock and lock out every later flush in this process.
       #
       # @return [Symbol]

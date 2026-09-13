@@ -20,11 +20,12 @@ module Bigcommerce
     module Integrations
       class Resque
         ##
-        # Wires `FlushOnExit` into Resque, or logs why it did not.
+        # Prepends `FlushOnExit` to `Resque::Worker`, or logs why it did not.
         #
-        # Reads `resque_flush_on_exit_enabled` once, at boot, and prepends `FlushOnExit` to `Resque::Worker` only
-        # when it is true. Nothing reads the setting again. A forked child either finds the module in its ancestor
-        # chain and flushes, or does not find it and returns as it always did.
+        # Reads `resque_flush_on_exit_enabled` once, at boot, and prepends only when it is true.
+        # Nothing reads the setting again.
+        # A forked child either finds the module in its ancestor chain and flushes, or does not find it and returns as
+        # it always did.
         #
         # See `FlushOnExit` for what the flush does and why it is needed at all.
         #

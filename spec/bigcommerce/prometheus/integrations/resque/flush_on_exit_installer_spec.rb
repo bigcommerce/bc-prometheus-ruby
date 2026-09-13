@@ -13,7 +13,7 @@
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
 # WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-# OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+# OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR   THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 require 'spec_helper'
 
@@ -40,8 +40,10 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExitInstaller do
   end
 
   describe 'with a client that cannot flush' do
-    # `Integrations::Resque.start` accepts any client, so a plain `PrometheusExporter::Client` can reach here. It has
-    # no `flush!`. The per-job path stays silent about that on purpose, which left this case with no signal at all.
+    # `Integrations::Resque.start` accepts any client, so a plain `PrometheusExporter::Client` can reach here.
+    # It has no `flush!`.
+    # `FlushOnExit.flush` skips such a client without raising or logging, so this boot warning is the only signal
+    # the caller gets.
     let(:logger) { instance_double(Logger, warn: nil, info: nil) }
     let(:client) { instance_double(PrometheusExporter::Client) }
 
@@ -60,7 +62,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExitInstaller do
       expect(logger).to have_received(:warn).with(/resque flush on exit is enabled/)
     end
 
-    it 'does not wire up a flush that cannot run' do
+    it 'does not prepend a flush that cannot run' do
       described_class.new(client: client).install
       expect(worker_class).not_to have_received(:prepend)
     end
@@ -71,7 +73,6 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExitInstaller do
 
       expect(worker_class).to have_received(:prepend)
     end
-
   end
 
   describe 'with a client that can flush' do
@@ -89,7 +90,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExitInstaller do
       described_class.new(client: client).install
     end
 
-    it 'wires the flush into the worker' do
+    it 'prepends the flush to the worker' do
       expect(worker_class).to have_received(:prepend)
     end
 
@@ -111,8 +112,8 @@ describe Bigcommerce::Prometheus::Integrations::Resque::FlushOnExitInstaller do
       Bigcommerce::Prometheus.resque_flush_on_exit_enabled = true
     end
 
-    # `prepend` is idempotent, so the chain would survive a second install either way. What the guard protects is the
-    # boot log, and the client the first install chose.
+    # `prepend` is idempotent, so the chain would survive a second install either way.
+    # What the guard protects is the boot log, and the client the first install was given.
     it 'says nothing a second time, so one boot logs one line' do
       described_class.new(client: client).install
       expect(logger).not_to have_received(:info)

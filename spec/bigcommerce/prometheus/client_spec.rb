@@ -20,8 +20,8 @@ require 'spec_helper'
 describe Bigcommerce::Prometheus::Client do
   let(:client) { described_class.instance }
 
-  # What is delivered, and how it is bounded, is `Delivery`'s own spec. What matters here is that the client hands off
-  # to one, and that it hands off to the right one after a fork.
+  # The client owns a `Delivery` and delegates sending to it.
+  # These examples check that delegation, and that a forked child gets a fresh `Delivery` rather than the inherited one.
   let(:delivery) { client.instance_variable_get(:@delivery) }
 
   describe '#initialize' do
@@ -99,7 +99,7 @@ describe Bigcommerce::Prometheus::Client do
       expect(client.instance_variable_get(:@worker_thread)).to be_nil
     end
 
-    it 'replaces a mutex that may have been held when the fork landed' do
+    it 'replaces a mutex that the parent may have been holding at the moment of the fork' do
       original = client.instance_variable_get(:@mutex)
       original.lock
       client.reset_after_fork!
@@ -112,8 +112,11 @@ describe Bigcommerce::Prometheus::Client do
       expect(client.instance_variable_get(:@mutex)).not_to be_locked
     end
 
-    # Carries the delivery lock with it. A lock held by a thread that did not survive the fork would otherwise never
-    # be released, and the child's first delivery would wait out its whole budget for nothing.
+    # The delivery owns the mutex that serializes sending.
+    # A fork copies that mutex in whatever state it was in, but only the forking thread survives.
+    # So if the parent's background thread was mid-send, the child starts with a locked mutex and no thread that can
+    # unlock it.
+    # The child's first flush would then poll the lock until its whole budget expired, without sending anything.
     it 'replaces the delivery, so the child does not inherit the lock or the queue behind it' do
       original = client.instance_variable_get(:@delivery)
       client.reset_after_fork!

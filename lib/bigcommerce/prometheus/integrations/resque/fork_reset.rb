@@ -23,7 +23,7 @@ module Bigcommerce
         # Give a forked child a clean client, before anything in that child can use the one it inherited.
         #
         # The client is a singleton, so `fork` hands the child a copy of the parent's outbound queue.
-        # Those messages are the parent's to send, and it still holds them.
+        # The messages on that queue are the parent's to send, and it still holds them.
         # ForkReset ensures that the child starts with an empty queue and sends only what its own job observes.
         #
         # Wraps `Resque::Worker#perform` rather than registering a `Resque.after_fork` hook to ensure metrics sent during hooks are not lost
@@ -46,10 +46,11 @@ module Bigcommerce
             ##
             # Discard the inherited queue, if and only if this is a forked child.
             #
-            # `fork_per_job?` is not enough on its own. `Worker#perform` also runs in the long-lived parent, both for a
-            # worker started with FORK_PER_JOB=false and through the deprecated `Worker#process`, and a reset there
-            # would throw away the queue the parent is still responsible for sending. A changed pid is the fact that
-            # actually distinguishes the two, and it is the same test the upstream client applies to its own socket.
+            # `fork_per_job?` is not enough on its own.
+            # `Worker#perform` also runs in the long-lived parent, both for a worker started with FORK_PER_JOB=false and
+            # through the deprecated `Worker#process`.
+            # A reset would throw away the queue the parent is still responsible for sending.
+            # A changed pid is the fact that actually distinguishes the two.
             #
             def reset_if_forked
               return if installed_in_pid.nil? || Process.pid == installed_in_pid

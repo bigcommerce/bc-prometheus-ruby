@@ -46,43 +46,74 @@ describe Bigcommerce::Prometheus::Delivery do
         expect(Net::HTTP).not_to have_received(:new)
       end
 
-      # Distinguished from :success so a caller can tell "the job recorded nothing" from "the job recorded something
-      # and it arrived". Reached only after taking the delivery lock, never by short circuiting on an empty queue.
+      # :empty and :success are separate outcomes so a caller can distinguish between a flush that didn't send any
+      # metrics and one that sent metrics and got them delivered.
+      # Reached only after taking the delivery lock, never by short-circuiting on an empty queue.
       it 'reports :empty' do
         allow(Net::HTTP).to receive(:new)
         expect(delivery.flush!).to eq :empty
       end
     end
 
+    # Several examples below need one thread to have reached a known point before another thread acts.
+    # A `Latch` makes that wait explicit, rather than sleeping for a guessed duration and hoping the other thread got
+    # far enough. Sleeping makes the interleaving likely. A latch makes it certain.
+    #
+    # `await` blocks until another thread calls `signal`.
+    #
+    # The `Thread::Queue` in Latch is just a mechanism to implement the Latch and totally unrelated to the metric delivery queue.
+    class Latch
+      def initialize
+        @queue = Thread::Queue.new
+      end
+
+      # Releases a thread blocked in `await`, since its `pop` now has something to take.
+      # Signaling before any thread awaits is also safe.
+      # The value stays on the queue, and the next `await` returns immediately.
+      def signal
+        @queue << true
+      end
+
+      def await
+        @queue.pop
+      end
+    end
+
     context 'when the background thread is part way through a delivery' do
-      # The bug this exists to catch: `flush!` used to return as soon as the queue looked empty, and the queue looks
-      # empty the instant the worker thread pops the last message, well before that message reaches the wire. A child
-      # that exits at that point destroys the request.
+      # The background child delivery thread can be in the process of sending metrics when `flush!` is invoked.
+      # The queue is empty from the moment the background thread pops the last message until that request completes.
+      # As such, an empty queue doesn't guarantee that all metrics have been sent, just that there are no more to send.
       #
-      # Rendezvous rather than sleeps, so the interleaving is fixed rather than hoped for. The only timing in the
-      # example is the join timeout, which asserts a negative and is therefore generous.
-      let(:entered_delivery) { Queue.new }
-      let(:release_delivery) { Queue.new }
+      # flush! waits on the delivery lock prior to running.
+      # This ensures that flush! doesn't just detect an empty queue and return allowing the process to exit
+      # whilst the child delivery thread is in the process of sending metrics.
+      #
+      # The latches coordinate the two threads, so this example can ensure the interleaving it needs.
+      let(:delivery_started) { Latch.new }
+      let(:finish_delivery) { Latch.new }
 
       # Generous, because this example is about waiting rather than about the deadline that bounds the wait.
       let(:flush_timeout) { 5 }
 
       before do
         allow(delivery).to receive(:post_message) do
-          entered_delivery << true
-          release_delivery.pop
+          delivery_started.signal
+          finish_delivery.await
         end
         queue << 'in_flight_message'
       end
 
       it 'does not return until that delivery has finished' do
         Thread.new { delivery.process_queue }
-        entered_delivery.pop
+        delivery_started.await
 
         flusher = Thread.new { delivery.flush! }
+        # A broken `flush!` that returned as soon as the queue looked empty would return in under a millisecond.
+        # Finding it still blocked after 200ms is therefore good evidence that it is waiting on the delivery lock.
+        # The 200ms is a margin over that near-instant return, not a measurement of anything.
         expect(flusher.join(0.2)).to be_nil
 
-        release_delivery << true
+        finish_delivery.signal
         expect(flusher.join(2)).to eq flusher
       end
     end
@@ -122,18 +153,20 @@ describe Bigcommerce::Prometheus::Delivery do
         expect(prometheus_logger).to have_received(:warn).with(/dropping a message.*collector unreachable/)
       end
 
-      # The regression this exists to catch. `drain` already reports the specific exception; without excluding
-      # `:error`, the message it emptied the queue on its way out of would additionally be misreported below as a
-      # lock wait on an in-flight background send, when nothing was ever in flight.
+      # `report_outcome` logs nothing when the outcome is `:error` and the queue is empty.
+      # `drain` has already logged the exception in its own warning, so it does not need to be logged a second time.
+      # The warning it skips describes giving up while waiting on an in-flight background send.
+      # A `drain` that raised never had a send in flight, so that description would be wrong.
       it 'does not also report it as a lock wait on an in-flight send' do
         delivery.flush!
         expect(prometheus_logger).not_to have_received(:warn).with(/in-flight send/)
       end
     end
 
-    # The regression this exists to catch. `drain` reports only the message it was carrying when it failed, then
-    # re-raises, leaving everything behind that message on the queue. Excluding `:error` from reporting entirely meant
-    # those were destroyed by the child's `exit!` in silence, which is the one thing this reporting exists to prevent.
+    # `drain` reports only the message it was carrying when it failed, then re-raises.
+    # Everything behind that message stays on the queue.
+    # `report_outcome` counts those and logs them even when the outcome is `:error`, so the metrics the child's
+    # `exit!` will destroy are logged first.
     context 'when a send fails part way through, leaving messages behind it on the queue' do
       before do
         allow(delivery).to receive(:post_message).and_raise(StandardError, 'collector unreachable')
@@ -147,17 +180,17 @@ describe Bigcommerce::Prometheus::Delivery do
     end
 
     context 'when a delivery is in flight for longer than the flush timeout' do
-      let(:lock_taken) { Queue.new }
+      let(:lock_taken) { Latch.new }
 
       before do
         queue << 'stranded_message'
 
         @lock_holder = Thread.new do
           delivery_mutex.lock
-          lock_taken << true
+          lock_taken.signal
           sleep
         end
-        lock_taken.pop
+        lock_taken.await
       end
 
       after do
@@ -185,15 +218,15 @@ describe Bigcommerce::Prometheus::Delivery do
     # popped and is sending, so counting the queue alone reported "nothing abandoned" in the one case where something
     # is: the process is about to `exit!` and destroy that request.
     context 'when the lock cannot be taken and nothing is left on the queue' do
-      let(:lock_taken) { Queue.new }
+      let(:lock_taken) { Latch.new }
 
       before do
         @lock_holder = Thread.new do
           delivery_mutex.lock
-          lock_taken << true
+          lock_taken.signal
           sleep
         end
-        lock_taken.pop
+        lock_taken.await
       end
 
       after do
@@ -238,9 +271,10 @@ describe Bigcommerce::Prometheus::Delivery do
       queue << 'queued_message'
     end
 
-    # Nothing waits on the background thread, so it keeps the 60 second defaults this gem has always sent
-    # under. Shortening them here would re-time delivery for every existing user, including the ones who
-    # never enable the flush.
+    # `process_queue` passes no timeout, so `Net::HTTP`'s defaults apply, as they always have in this gem.
+    # Nothing waits on the background thread, so there is no reason to shorten those timeouts.
+    # Shortening them would change delivery timing for every user of the gem, including those who never enable the
+    # flush.
     it 'leaves the connect timeout at the Net::HTTP default' do
       delivery.process_queue
       expect(http).not_to have_received(:open_timeout=)
@@ -258,9 +292,9 @@ describe Bigcommerce::Prometheus::Delivery do
   end
 
   describe '#flush! against a collector that stops answering' do
-    # A real socket that accepts and then never replies, which is what a saturated exporter looks like from here.
-    # Timeouts run against the clock, so a stub cannot show that the bound holds. Without it this example takes as
-    # long as `Net::HTTP`'s 60 second read default.
+    # A real socket that accepts and then never replies, which is what a saturated exporter looks like.
+    # Timeouts run against the clock, so a stub cannot show that the bound holds.
+    # Without it this example takes as long as `Net::HTTP`'s 60 second read default.
     let(:stalled_collector) { TCPServer.new('127.0.0.1', 0) }
     let(:port) { stalled_collector.addr[1] }
 
@@ -284,18 +318,21 @@ describe Bigcommerce::Prometheus::Delivery do
       expect(elapsed).to be < 0.1
     end
 
-    # Two things can end this flush, and which one wins is a race. `drain`'s own deadline can expire, naming
-    # the message it was carrying, or the watchdog can stop the thread first and report an in-flight send.
-    # Both say an observation was lost, which is the part that matters. Asserting either one alone is
-    # asserting which mechanism happened to win.
+    # Two paths can end this flush, and which comes first is not deterministic.
+    # `post_message` passes the remaining budget to `Net::HTTP`, so the request itself can time out.
+    # `drain` then logs the message it was carrying, and the outcome is `:error`.
+    # Alternatively, `attempt_flush_within_budget` reaches its `join(@flush_timeout)` first and kills the thread.
+    # `report_outcome` then logs an in-flight send, and the outcome is `:timeout`.
+    # Both warnings say an observation was lost, which is what this example checks.
+    # Matching only one would assert which path won rather than the behavior.
     it 'says something was lost, so an outage is not silent' do
       delivery.flush!
       expect(prometheus_logger).to have_received(:warn).with(/dropping a message|in-flight send/)
     end
   end
   describe '#flush! when delivery overruns the budget' do
-    # Per-phase timeouts cannot bound a request as a whole, so the budget is enforced by stopping the thread doing
-    # the delivering. Without that the caller waits for however long the phases take between them.
+    # `Net::HTTP`'s own timeouts do not cover a whole request and response, so the budget is enforced by stopping
+    # the thread doing the delivering. Without that the caller waits for however long the request takes.
     before do
       allow(delivery).to receive(:attempt_flush) { sleep 5 }
       queue << 'queued_message'
@@ -325,12 +362,8 @@ describe Bigcommerce::Prometheus::Delivery do
   end
 
   # A mutex held by a thread that dies is released by the VM, so a stopped flush cannot strand the delivery lock.
-  # The whole design rests on that: if a timed-out flush kept the lock, every later flush in the process would give
-  # up waiting for it.
-  #
-  # The case above stubs `attempt_flush`, so the lock is never taken and nothing is stranded either way. Here only
-  # the send is stubbed, so the real `deliver_before` takes the lock and is still holding it when the budget
-  # expires and the thread is stopped.
+  # A stranded lock would make every later `flush!` in the process wait out its whole budget and send nothing.
+  # A forked Resque child flushes once and exits, so this protects longer-lived callers rather than that path.
   describe '#flush! when the thread is stopped while it holds the delivery lock' do
     before do
       allow(delivery).to receive(:post_message) { sleep 5 }
