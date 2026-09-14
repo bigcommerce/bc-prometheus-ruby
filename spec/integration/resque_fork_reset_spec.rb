@@ -48,8 +48,8 @@ end
 #   FORK_INTEGRATION=1 REDIS_URL=redis://127.0.0.1:6379/15 bundle exec rspec spec/integration
 #
 describe 'a forked Resque child and the queue it inherits', :fork_integration do
-  # A constant declared in a `describe` block lands on Object, so it has to be unique across the whole suite rather
-  # than only within this file.
+  # A constant declared in a `describe` block is defined on Object, so it has to be unique across the whole
+  # suite rather than only within this file.
   RESET_JOB_COUNT = 20
   BACKLOG_METRIC = 'fork_reset_parent_backlog'
 

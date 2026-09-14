@@ -108,7 +108,7 @@ module Bigcommerce
       # A child that sent them too would double count every observation on that queue.
       #
       # The mutex is replaced for a rarer case.
-      # A fork that lands while another thread holds it gives the child a locked mutex and no thread that can ever
+      # Forking while another thread holds it gives the child a locked mutex and no thread that can ever
       # unlock it.
       #
       # `Delivery` is rebuilt last, and has to be, for both of those reasons.
