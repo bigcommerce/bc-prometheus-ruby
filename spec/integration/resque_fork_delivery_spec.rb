@@ -86,6 +86,13 @@ describe 'metric delivery from Resque forked children', :fork_integration do
     # It captured its host and port when first built, which an earlier spec in the run may already have done.
     # Reconfiguring that instance and dropping whatever it has queued keeps the result independent of spec ordering.
     client = Bigcommerce::Prometheus.client
+
+    # `reset_after_fork!` drops the reference to the delivery thread rather than stopping it, which is right in a
+    # forked child, where that thread did not survive the fork and there is nothing to stop.
+    # Calling it in this process leaves the old thread running, and its loop reads `@delivery` fresh on every pass,
+    # so an orphan keeps draining whatever queue the client holds now.
+    # Stopping it first is what keeps one example from sending another example's metrics.
+    client.instance_variable_get(:@worker_thread)&.kill
     client.instance_variable_set(:@host, '127.0.0.1')
     client.instance_variable_set(:@port, exporter.port)
     client.instance_variable_set(:@flush_timeout, 5.0)
