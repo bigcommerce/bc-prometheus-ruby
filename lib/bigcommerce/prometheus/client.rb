@@ -103,15 +103,17 @@ module Bigcommerce
       ##
       # Discard the state a forked child inherited from its parent.
       #
-      # The client is a singleton, so `fork` hands the child a copy of the parent's outbound queue
-      # Anything still queued in the parent therefore has to be re-sent by the child,
+      # The client is a singleton, so `fork` gives the child a copy of the parent's outbound queue.
+      # Those messages are the parent's to send, and it still holds them.
+      # A child that sent them too would double count every observation on that queue.
       #
-      # The mutex is reset for a rarer case. If the fork happens while another thread holds the mutex, the child inherits a
-      # locked mutex and can never claim it.
+      # The mutex is replaced for a rarer case.
+      # A fork that lands while another thread holds it gives the child a locked mutex and no thread that can ever
+      # unlock it.
       #
-      # `Delivery` is rebuilt last, and needs to be for both of the reasons mentioned above.
-      # 1. It has to be given the new queue
-      # 2. Its delivery lock may have been held by the parent delivery thread that did not survive the fork.
+      # `Delivery` is rebuilt last, and has to be, for both of those reasons.
+      # 1. It needs the new queue.
+      # 2. Its delivery lock may have been held by the parent's delivery thread, which did not survive the fork.
       #
       def reset_after_fork!
         @queue = Queue.new

@@ -49,7 +49,8 @@ module Bigcommerce
 
           ##
           # Ensure the forked child starts with an empty metrics queue.
-          # @param [PrometheusExporter::Client] client
+          #
+          # @param [PrometheusExporter::Client] client the client a child will be given.
           #
           def install_fork_reset(client)
             ForkReset.client = client

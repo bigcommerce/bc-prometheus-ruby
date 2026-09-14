@@ -52,10 +52,16 @@ starts and then sleeps `client_thread_sleep` between passes.
 Whatever is still queued when the child exits is discarded, silently. A job that pushes and returns loses the
 observation. A job that keeps working after pushing often does not.
 
-**Always on:** the child is given a clean client queue at fork time, by wrapping `Resque::Worker#perform`. Without this
-it would inherit a copy of whatever the parent had not yet drained and have to re-send all of it before reaching its
-own message. This costs nothing and needs no configuration. `Worker#perform` is what runs the `after_fork` hooks, so
-the reset happens before all of them, including any of your own that record metrics.
+**Always on:** the child is given a clean client queue at fork time, by wrapping `Resque::Worker#perform`.
+Without this it would inherit a copy of whatever the parent had not yet drained, and re-send all of it before
+reaching its own message.
+The parent still holds those same messages and sends them too, so every observation on that queue is counted twice.
+This costs nothing and needs no configuration.
+`Worker#perform` is what runs the `after_fork` hooks, so the reset happens before all of them, including any of your
+own that record metrics.
+
+The reset runs only in a forked child, identified by a changed pid.
+A worker started with `FORK_PER_JOB=false` keeps the queue it is still responsible for sending.
 
 **Opt in:** the child can also deliver its own queue on the calling thread before the job returns, by wrapping
 `Resque::Worker#perform`. Delivery is serialised against the background thread, so a request already in progress

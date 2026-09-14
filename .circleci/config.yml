@@ -55,11 +55,12 @@ workflows:
           <<: *ruby_3_4_defaults
           name: ruby-3_4-rspec_unit
           db: false
-      # These fork real Resque children and need a redis. The specs tag their `describe` with
-      # :fork_integration, and spec/spec_helper.rb excludes that tag unless FORK_INTEGRATION is set. The
-      # hook below sets it, which is the only reason they run here.
+      # These fork real Resque children and need a redis.
+      # Every other job excludes them.
+      # The pre-exec hook below is what enables them for ruby-3_4-rspec_fork_integration.
+      # Deleting that hook fails the job rather than quietly passing an empty run.
       #
-      # `additional_args` just picks the directory. Without the hook this job would run nothing.
+      # `additional_args` only narrows which files load. It is not what enables the specs.
       - ruby/rspec-unit:
           <<: *ruby_3_4_defaults
           name: ruby-3_4-rspec_fork_integration

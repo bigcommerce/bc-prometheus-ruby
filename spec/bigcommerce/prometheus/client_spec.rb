@@ -68,7 +68,7 @@ describe Bigcommerce::Prometheus::Client do
   end
 
   describe '#process_queue' do
-    it 'delivers without a deadline, since the background thread holds nothing up' do
+    it 'delegates to the delivery, which owns the path to the collector' do
       allow(delivery).to receive(:process_queue)
       client.process_queue
       expect(delivery).to have_received(:process_queue)
