@@ -50,12 +50,28 @@ module Bigcommerce
           ##
           # Ensure the forked child starts with an empty metrics queue.
           #
+          # Whether a client can reset itself is fixed when it is passed in, so it is settled once at install
+          # rather than on every job. This matches what FlushOnExitInstaller does with `flush!`.
+          # A client that cannot is left unwrapped. Prepending anyway would put a module in the ancestors of
+          # `Resque::Worker` that advertises a reset it can never perform.
+          #
           # @param [PrometheusExporter::Client] client the client a child will be given.
           #
           def install_fork_reset(client)
+            return log_reset_unsupported unless client.respond_to?(:reset_after_fork!)
+
             ForkReset.client = client
             ForkReset.installed_in_pid = Process.pid
             ::Resque::Worker.prepend(ForkReset)
+          end
+
+          ##
+          # @return [void]
+          #
+          def log_reset_unsupported
+            ::Bigcommerce::Prometheus.logger&.warn(
+              '[bigcommerce-prometheus] resque fork reset skipped: the client does not support reset_after_fork!.'
+            )
           end
         end
       end

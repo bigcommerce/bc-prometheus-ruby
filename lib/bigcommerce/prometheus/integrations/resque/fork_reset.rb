@@ -52,9 +52,11 @@ module Bigcommerce
             # A reset would throw away the queue the parent is still responsible for sending.
             # A changed pid is the fact that actually distinguishes the two.
             #
+            # The client is known to answer `reset_after_fork!`, because `install_fork_reset` prepends this
+            # module only for a client that does.
+            #
             def reset_if_forked
               return if installed_in_pid.nil? || Process.pid == installed_in_pid
-              return unless client.respond_to?(:reset_after_fork!)
 
               client.reset_after_fork!
             end

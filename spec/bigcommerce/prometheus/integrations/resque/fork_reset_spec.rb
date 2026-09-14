@@ -104,16 +104,4 @@ describe Bigcommerce::Prometheus::Integrations::Resque::ForkReset do
       expect(client).not_to have_received(:reset_after_fork!)
     end
   end
-
-  context 'when the client cannot reset itself' do
-    let(:client) { instance_double(PrometheusExporter::Client) }
-
-    before { described_class.installed_in_pid = Process.pid + 1 }
-
-    # A caller may pass `Integrations::Resque.start` a plain upstream client, which has no `reset_after_fork!`.
-    # That costs the child the clean queue, but it must not cost it the job.
-    it 'does not raise' do
-      expect { worker.perform(job) }.not_to raise_error
-    end
-  end
 end
