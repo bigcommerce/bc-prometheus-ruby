@@ -26,4 +26,13 @@ RSpec.configure do |config|
     mocks.allow_message_expectations_on_nil = true
   end
   config.color = true
+
+  # Specs tagged :fork_integration fork real Resque children and need a redis, so they are opt-in rather than part of
+  # the default run. Enable with FORK_INTEGRATION=1.
+  config.filter_run_excluding(:fork_integration) unless ENV.fetch('FORK_INTEGRATION', nil)
+
+  # A run that matches no examples is a failure, not a pass. Without this, pointing rspec at spec/integration
+  # without FORK_INTEGRATION set reports "0 examples" and exits 0, so a mis-wired tag looks like a green CI
+  # job that ran nothing.
+  config.fail_if_no_examples = true
 end

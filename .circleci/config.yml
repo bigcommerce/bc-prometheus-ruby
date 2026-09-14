@@ -55,6 +55,23 @@ workflows:
           <<: *ruby_3_4_defaults
           name: ruby-3_4-rspec_unit
           db: false
+      # These fork real Resque children and need a redis.
+      # Every other job excludes them.
+      # The pre-exec hook below is what enables them for ruby-3_4-rspec_fork_integration.
+      # Deleting that hook fails the job rather than quietly passing an empty run.
+      #
+      # `additional_args` only narrows which files load. It is not what enables the specs.
+      - ruby/rspec-unit:
+          <<: *ruby_3_4_defaults
+          name: ruby-3_4-rspec_fork_integration
+          db: false
+          code-climate: false
+          report-code-coverage: false
+          additional_args: "spec/integration"
+          pre-exec-hooks:
+            - run:
+                name: Enable the fork integration specs
+                command: echo 'export FORK_INTEGRATION=1' >> "$BASH_ENV"
   ruby_4_0:
     jobs:
       - ruby/bundle-audit:
