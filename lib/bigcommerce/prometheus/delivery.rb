@@ -85,6 +85,14 @@ module Bigcommerce
         outcome
       end
 
+      ##
+      # @param [String] path
+      # @return [Module<URI>]
+      #
+      def uri_path(path)
+        URI("http://#{@host}:#{@port}#{path}")
+      end
+
       private
 
       ##
@@ -179,14 +187,6 @@ module Bigcommerce
         http = ::Net::HTTP.new(uri.host, uri.port)
         http.open_timeout = http.read_timeout = http.write_timeout = timeout if timeout
         http.start { |connection| connection.post(uri.path, message) }
-      end
-
-      ##
-      # @param [String] path
-      # @return [Module<URI>]
-      #
-      def uri_path(path)
-        URI("http://#{@host}:#{@port}#{path}")
       end
 
       # @param [Symbol] outcome

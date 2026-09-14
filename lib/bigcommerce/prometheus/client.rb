@@ -63,6 +63,17 @@ module Bigcommerce
       end
 
       ##
+      # Kept as a delegator rather than removed with the rest of the delivery code.
+      # It is public API on a gem's class, so dropping it would break any caller.
+      #
+      # @param [String] path
+      # @return [Module<URI>]
+      #
+      def uri_path(path)
+        @delivery.uri_path(path)
+      end
+
+      ##
       # @param [String] str
       def send(str)
         return unless Bigcommerce::Prometheus.enabled

@@ -75,6 +75,12 @@ describe Bigcommerce::Prometheus::Client do
     end
   end
 
+  describe '#uri_path' do
+    it 'answers the collector URL the delivery would post to' do
+      expect(client.uri_path('/send-metrics')).to eq delivery.uri_path('/send-metrics')
+    end
+  end
+
   describe '#reset_after_fork!' do
     before do
       allow(Bigcommerce::Prometheus).to receive(:enabled).and_return(true)
