@@ -63,8 +63,11 @@ module Bigcommerce
       end
 
       ##
-      # Kept as a delegator rather than removed with the rest of the delivery code.
-      # It is public API on a gem's class, so dropping it would break any caller.
+      # Build the collector URI for a path, such as '/send-metrics'.
+      #
+      # Kept because it was public API before delivery moved out of this class.
+      # It no longer sits on the path a message takes, so overriding it redirects nothing.
+      # Set the host and port through `Bigcommerce::Prometheus.configure`, before the first call to `Client.instance`.
       #
       # @param [String] path
       # @return [Module<URI>]
