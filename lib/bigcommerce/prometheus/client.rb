@@ -19,7 +19,6 @@ module Bigcommerce
   module Prometheus
     ##
     # Client implementation for Prometheus
-    #
     class Client < ::PrometheusExporter::Client
       include Singleton
       include Loggable
@@ -42,6 +41,7 @@ module Bigcommerce
         )
         PrometheusExporter::Client.default = self
         @process_name = process_name || ::Bigcommerce::Prometheus.process_name
+        @delivery = build_delivery
       end
 
       ##
@@ -62,15 +62,18 @@ module Bigcommerce
       end
 
       ##
+      # Build the collector URI for a path, such as '/send-metrics'.
+      # Kept because it was public API before delivery moved out of this class.
       # @param [String] path
       # @return [Module<URI>]
       #
       def uri_path(path)
-        URI("http://#{@host}:#{@port}#{path}")
+        @delivery.uri_path(path)
       end
 
       ##
       # @param [String] str
+      #
       def send(str)
         return unless Bigcommerce::Prometheus.enabled
 
@@ -81,15 +84,31 @@ module Bigcommerce
       # Process the current queue and flush to the collector
       #
       def process_queue
-        while @queue.length.to_i.positive?
-          begin
-            message = @queue.pop
-            Net::HTTP.post(uri_path('/send-metrics'), message)
-          rescue StandardError => e
-            logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus Exporter is dropping a message to #{uri_path('/send-metrics')}: #{e}"
-            raise
-          end
-        end
+        @delivery.process_queue
+      end
+
+      ##
+      # Discard the state a forked child inherited from its parent.
+      #
+      def reset_after_fork!
+        @queue = Queue.new
+        @worker_thread = nil
+        @mutex = Mutex.new
+        @delivery = build_delivery
+      end
+
+      private
+
+      ##
+      # @return [Bigcommerce::Prometheus::Delivery]
+      #
+      def build_delivery
+        Delivery.new(
+          queue: @queue,
+          host: @host,
+          port: @port,
+          process_name: @process_name
+        )
       end
     end
   end

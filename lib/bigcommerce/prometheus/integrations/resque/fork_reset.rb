@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright (c) 2019-present, BigCommerce Pty. Ltd. All rights reserved
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
@@ -13,20 +15,42 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-ENV['RACK_ENV'] = 'test'
-$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
-require_relative 'simplecov_helper'
-require 'bigcommerce/prometheus'
-require 'pry'
-Dir["#{File.join(File.dirname(__FILE__), 'support')}/**/*.rb"].sort.each { |f| require f }
+module Bigcommerce
+  module Prometheus
+    module Integrations
+      class Resque
+        ##
+        # Clear the state of the parent for the forked Resque job
+        #
+        module ForkReset
+          class << self
+            ##
+            # @return [PrometheusExporter::Client]
+            #
+            attr_accessor :client
 
-RSpec.configure do |config|
-  config.expose_current_running_example_as :example
-  config.mock_with :rspec do |mocks|
-    mocks.allow_message_expectations_on_nil = true
+            ##
+            # @return [Integer]
+            #
+            attr_accessor :installed_in_pid
+
+            def reset_if_forked
+              return if installed_in_pid.nil? || Process.pid == installed_in_pid
+
+              client.reset_after_fork!
+            end
+          end
+
+          ##
+          # @param [Resque::Job] job
+          # @param [Proc] block
+          #
+          def perform(job, &block)
+            ForkReset.reset_if_forked
+            super
+          end
+        end
+      end
+    end
   end
-  config.color = true
-  # Fail when no examples match the tag
-  config.filter_run_excluding(:fork_integration)
-  config.fail_if_no_examples = true
 end

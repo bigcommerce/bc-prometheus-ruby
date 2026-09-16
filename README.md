@@ -43,6 +43,10 @@ require 'bigcommerce/prometheus'
 Bigcommerce::Prometheus::Instrumentors::Resque.new(app: Rails.application).start
 ```
 
+### Metrics pushed from inside a job
+Resque runs each job in a forked child. The client is a singleton, so it must be reset and have its metrics queue 
+cleared after `fork` so the child doesn't resend the parent's metrics. 
+
 ### Per-job metrics (opt-in)
 
 Set `PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED=1` on Resque worker pods to enable two additional histograms recorded from the parent worker process.
