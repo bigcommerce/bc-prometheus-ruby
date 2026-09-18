@@ -42,6 +42,7 @@ module Bigcommerce
         PrometheusExporter::Client.default = self
         @process_name = process_name || ::Bigcommerce::Prometheus.process_name
         @delivery = build_delivery
+        @flush = build_flush
       end
 
       ##
@@ -51,7 +52,7 @@ module Bigcommerce
         close_socket_if_old!
         process_queue
       rescue StandardError => e
-        logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus client failed to send message to #{@host}:#{@port} #{e} - #{e.backtrace[0..5].join("\n")}"
+        logger.warn "[bigcommerce-prometheus][#{@process_name}] #{e.class}: #{e.message}\n#{e.backtrace&.first(6)&.join("\n")}"
       end
 
       ##
@@ -87,14 +88,21 @@ module Bigcommerce
         @delivery.process_queue
       end
 
-      ##
-      # Discard the state a forked child inherited from its parent.
-      #
+      def flush!
+        outcome = @flush.call
+        if outcome.message
+          context = outcome.context.map { |k, v| "#{k}=#{v}" }.join(' ')
+          logger.warn "[bigcommerce-prometheus][#{@process_name}] #{outcome.message} #{context}".strip
+        end
+        outcome
+      end
+
       def reset_after_fork!
         @queue = Queue.new
         @worker_thread = nil
         @mutex = Mutex.new
         @delivery = build_delivery
+        @flush = build_flush
       end
 
       private
@@ -103,12 +111,11 @@ module Bigcommerce
       # @return [Bigcommerce::Prometheus::Delivery]
       #
       def build_delivery
-        Delivery.new(
-          queue: @queue,
-          host: @host,
-          port: @port,
-          process_name: @process_name
-        )
+        Delivery.new(queue: @queue, host: @host, port: @port)
+      end
+
+      def build_flush
+        Flush.new(delivery: @delivery, timeout: ::Bigcommerce::Prometheus.client_flush_timeout)
       end
     end
   end

@@ -18,50 +18,63 @@
 module Bigcommerce
   module Prometheus
     module Integrations
-      ##
-      # Plugin for resque
-      #
       class Resque
-        class << self
-          def start(client: nil)
-            resque_client = client || ::Bigcommerce::Prometheus.client
-
-            install_fork_reset(resque_client)
-            FlushOnExitInstaller.new(client: resque_client).install
-
-            ::PrometheusExporter::Instrumentation::Process.start(
-              client: resque_client,
-              type: ::Bigcommerce::Prometheus.resque_process_label
-            )
-            ::Bigcommerce::Prometheus::Collectors::Resque.start(
-              client: resque_client,
-              frequency: ::Bigcommerce::Prometheus.resque_collection_frequency
-            )
-            ::Bigcommerce::Prometheus::Integrations::Resque::JobMetrics.start(
-              client: resque_client
-            )
-          end
-
-          private
-
+        ##
+        # Prepends `FlushOnExit` to `Resque::Worker`
+        #
+        class FlushOnExitInstaller
           ##
-          # @param [PrometheusExporter::Client] client
+          # @param [PrometheusExporter::Client] client the client whose queue a child will drain.
           #
-          def install_fork_reset(client)
-            return log_reset_unsupported unless client.respond_to?(:reset_after_fork!)
-
-            ForkReset.client = client
-            ForkReset.installed_in_pid = Process.pid
-            ::Resque::Worker.prepend(ForkReset)
+          def initialize(client:)
+            @client = client
           end
 
           ##
           # @return [void]
           #
-          def log_reset_unsupported
+          def install
+            return log_disabled unless ::Bigcommerce::Prometheus.resque_flush_on_exit_enabled
+            return log_unsupported unless @client.respond_to?(:flush!)
+
+            FlushOnExit.client = @client
+            return if installed?
+
+            ::Resque::Worker.prepend(FlushOnExit)
+
+            log_installed
+          end
+
+          private
+
+          ##
+          # @return [Boolean]
+          #
+          def installed?
+            defined?(::Resque::Worker) && ::Resque::Worker.ancestors.include?(FlushOnExit)
+          end
+
+          ##
+          # @return [void]
+          #
+          def log_disabled
+            ::Bigcommerce::Prometheus.logger&.info('[bigcommerce-prometheus] resque flush on exit is disabled')
+          end
+
+          ##
+          # @return [void]
+          #
+          def log_unsupported
             ::Bigcommerce::Prometheus.logger&.warn(
-              '[bigcommerce-prometheus] resque fork reset skipped: the client does not support reset_after_fork!.'
+              '[bigcommerce-prometheus] resque flush on exit is enabled but the client does not support flush!.'
             )
+          end
+
+          ##
+          # @return [void]
+          #
+          def log_installed
+            ::Bigcommerce::Prometheus.logger&.info('[bigcommerce-prometheus] resque flush on exit installed.')
           end
         end
       end
