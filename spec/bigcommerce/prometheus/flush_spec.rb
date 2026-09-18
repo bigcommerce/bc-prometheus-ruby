@@ -53,7 +53,7 @@ describe Bigcommerce::Prometheus::Flush do
       end
 
       it 'reports :empty' do
-        expect(flush.call).to eq :empty
+        expect(flush.call).to be_empty
       end
 
       it 'has no message worth logging' do
@@ -74,7 +74,7 @@ describe Bigcommerce::Prometheus::Flush do
       end
 
       it 'reports :success' do
-        expect(flush.call).to eq :success
+        expect(flush.call).to be_success
       end
 
       it 'has no message worth logging' do
@@ -118,7 +118,7 @@ describe Bigcommerce::Prometheus::Flush do
       end
 
       it 'reports :error' do
-        expect(flush.call).to eq :error
+        expect(flush.call).to be_error
       end
 
       it 'names the message it dropped, from where the send actually failed, as the outcome message' do
@@ -172,7 +172,7 @@ describe Bigcommerce::Prometheus::Flush do
       end
 
       it 'reports :timeout' do
-        expect(flush.call).to eq :timeout
+        expect(flush.call).to be_timeout
       end
     end
 
@@ -194,7 +194,7 @@ describe Bigcommerce::Prometheus::Flush do
       end
 
       it 'reports :timeout rather than :empty, since an empty queue is not the same as nothing being lost' do
-        expect(flush.call).to eq :timeout
+        expect(flush.call).to be_timeout
       end
 
       it 'reports the loss even though the queue length alone would say otherwise' do
@@ -251,7 +251,7 @@ describe Bigcommerce::Prometheus::Flush do
     end
 
     it 'reports :timeout, since the observations went nowhere' do
-      expect(flush.call).to eq :timeout
+      expect(flush.call).to be_timeout
     end
 
     it 'says what was abandoned, rather than leaving the loss silent' do
@@ -272,7 +272,7 @@ describe Bigcommerce::Prometheus::Flush do
     end
 
     it 'reports :timeout' do
-      expect(flush.call).to eq :timeout
+      expect(flush.call).to be_timeout
     end
 
     it 'releases the delivery lock, so the next flush is not locked out by a thread that no longer exists' do

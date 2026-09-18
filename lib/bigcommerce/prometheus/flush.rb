@@ -38,10 +38,6 @@ module Bigcommerce
         def timeout? = kind == :timeout
         def error? = kind == :error
 
-        def ==(other)
-          other.is_a?(Symbol) ? kind == other : super
-        end
-
         def self.from_post_failed(error)
           new(kind: :error, message: error.message)
         end
