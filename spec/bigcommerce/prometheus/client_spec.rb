@@ -68,15 +68,47 @@ describe Bigcommerce::Prometheus::Client do
   end
 
   describe '#worker_loop' do
-    it 'logs the error message when delivery fails' do
-      allow(client).to receive(:close_socket_if_old!)
-      allow(delivery).to receive(:process_queue).and_raise(StandardError, 'collector unreachable')
-      prometheus_logger = instance_double(Logger, warn: nil)
-      allow(Bigcommerce::Prometheus).to receive(:logger).and_return(prometheus_logger)
+    let(:prometheus_logger) { instance_double(Logger, warn: nil) }
+    let(:error) { StandardError.new('collector unreachable') }
 
+    before do
+      allow(client).to receive(:close_socket_if_old!)
+      allow(delivery).to receive(:process_queue).and_raise(error)
+      allow(Bigcommerce::Prometheus).to receive(:logger).and_return(prometheus_logger)
+    end
+
+    it 'logs the error message when delivery fails' do
       client.worker_loop
 
       expect(prometheus_logger).to have_received(:warn).with(a_string_including('collector unreachable'))
+    end
+
+    it 'names the exception class, since this rescues any StandardError and not only a delivery failure' do
+      client.worker_loop
+
+      expect(prometheus_logger).to have_received(:warn).with(a_string_including('StandardError'))
+    end
+
+    context 'when the error carries a backtrace' do
+      let(:error) do
+        StandardError.new('collector unreachable').tap do |e|
+          e.set_backtrace(["#{__FILE__}:1:in `a_named_frame`"])
+        end
+      end
+
+      it 'logs it, so an error whose message does not identify its origin can still be traced' do
+        client.worker_loop
+
+        expect(prometheus_logger).to have_received(:warn).with(a_string_including('a_named_frame'))
+      end
+    end
+
+    context 'when the error carries no backtrace' do
+      before { allow(error).to receive(:backtrace).and_return(nil) }
+
+      it 'still logs, rather than raising out of the rescue that keeps the worker thread alive' do
+        expect { client.worker_loop }.not_to raise_error
+      end
     end
   end
 

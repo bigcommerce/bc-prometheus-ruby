@@ -52,7 +52,7 @@ module Bigcommerce
         close_socket_if_old!
         process_queue
       rescue StandardError => e
-        logger.warn "[bigcommerce-prometheus][#{@process_name}] #{e.message}"
+        logger.warn "[bigcommerce-prometheus][#{@process_name}] #{e.class}: #{e.message}\n#{e.backtrace&.first(6)&.join("\n")}"
       end
 
       ##
