@@ -21,18 +21,8 @@ describe Bigcommerce::Prometheus::Delivery do
   let(:queue) { Queue.new }
   let(:host) { '127.0.0.1' }
   let(:port) { 9394 }
-  let(:prometheus_logger) { instance_double(Logger, warn: nil) }
 
-  let(:delivery) do
-    described_class.new(
-      queue: queue,
-      host: host,
-      port: port,
-      process_name: 'spec'
-    )
-  end
-
-  before { allow(Bigcommerce::Prometheus).to receive(:logger).and_return(prometheus_logger) }
+  let(:delivery) { described_class.new(queue: queue, host: host, port: port) }
 
   describe '#process_queue' do
     before { allow(Net::HTTP).to receive(:post) }
@@ -58,22 +48,50 @@ describe Bigcommerce::Prometheus::Delivery do
 
       expect(Net::HTTP).not_to have_received(:post)
     end
+
+    it 'reports :empty when nothing was queued' do
+      expect(delivery.process_queue).to eq :empty
+    end
+
+    it 'reports :success once everything queued has been posted' do
+      queue << 'queued_message'
+
+      expect(delivery.process_queue).to eq :success
+    end
   end
 
   describe '#process_queue when the collector cannot be reached' do
     before { allow(Net::HTTP).to receive(:post).and_raise(Errno::ECONNREFUSED) }
 
-    it 'raises, leaving the client worker loop to decide what to do' do
+    it 'raises a Delivery::PostFailed' do
       queue << 'queued_message'
 
-      expect { delivery.process_queue }.to raise_error(Errno::ECONNREFUSED)
+      expect { delivery.process_queue }.to raise_error(Bigcommerce::Prometheus::Delivery::PostFailed)
     end
 
-    it 'names the message it dropped, since nothing downstream will ever see it' do
+    it 'names the message it dropped in the error' do
       queue << 'queued_message'
 
-      expect { delivery.process_queue }.to raise_error(Errno::ECONNREFUSED)
-      expect(prometheus_logger).to have_received(:warn).with(/dropping a message to/)
+      expect { delivery.process_queue }.to raise_error(/dropping a message to/)
+    end
+
+    it 'reports the number of messages which will be discarded due to the failure' do
+      queue << 'queued_message'
+      queue << 'stranded_message'
+
+      expect { delivery.process_queue }.to raise_error do |error|
+        expect(error.sent).to eq 0
+        expect(error.undelivered).to eq 1
+      end
+    end
+  end
+
+  describe '#queue_size' do
+    it 'reports how many messages are currently queued' do
+      queue << 'first_message'
+      queue << 'second_message'
+
+      expect(delivery.queue_size).to eq 2
     end
   end
 end

@@ -51,7 +51,7 @@ module Bigcommerce
         close_socket_if_old!
         process_queue
       rescue StandardError => e
-        logger.warn "[bigcommerce-prometheus][#{@process_name}] Prometheus client failed to send message to #{@host}:#{@port} #{e} - #{e.backtrace[0..5].join("\n")}"
+        logger.warn "[bigcommerce-prometheus][#{@process_name}] #{e.message}"
       end
 
       ##
@@ -87,9 +87,6 @@ module Bigcommerce
         @delivery.process_queue
       end
 
-      ##
-      # Discard the state a forked child inherited from its parent.
-      #
       def reset_after_fork!
         @queue = Queue.new
         @worker_thread = nil
@@ -103,12 +100,7 @@ module Bigcommerce
       # @return [Bigcommerce::Prometheus::Delivery]
       #
       def build_delivery
-        Delivery.new(
-          queue: @queue,
-          host: @host,
-          port: @port,
-          process_name: @process_name
-        )
+        Delivery.new(queue: @queue, host: @host, port: @port)
       end
     end
   end

@@ -66,8 +66,21 @@ describe Bigcommerce::Prometheus::Client do
     end
   end
 
+  describe '#worker_loop' do
+    it 'logs the error message when delivery fails' do
+      allow(client).to receive(:close_socket_if_old!)
+      allow(delivery).to receive(:process_queue).and_raise(StandardError, 'collector unreachable')
+      prometheus_logger = instance_double(Logger, warn: nil)
+      allow(Bigcommerce::Prometheus).to receive(:logger).and_return(prometheus_logger)
+
+      client.worker_loop
+
+      expect(prometheus_logger).to have_received(:warn).with(a_string_including('collector unreachable'))
+    end
+  end
+
   describe '#uri_path' do
-    it 'answers the collector URL the delivery would post to' do
+    it 'returns URL the delivery would post to' do
       expect(client.uri_path('/send-metrics')).to eq delivery.uri_path('/send-metrics')
     end
   end
@@ -109,7 +122,7 @@ describe Bigcommerce::Prometheus::Client do
       expect(client.instance_variable_get(:@mutex)).not_to be_locked
     end
 
-    it 'replaces the delivery, so the child does not inherit the queue behind it' do
+    it 'replaces the delivery, so the child does not inherit the lock or the queue behind it' do
       original = client.instance_variable_get(:@delivery)
       client.reset_after_fork!
       expect(client.instance_variable_get(:@delivery)).not_to be original
