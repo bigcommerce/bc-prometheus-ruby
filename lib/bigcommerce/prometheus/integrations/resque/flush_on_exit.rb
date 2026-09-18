@@ -20,9 +20,9 @@ module Bigcommerce
     module Integrations
       class Resque
         ##
-        # Clear the state of the parent for the forked Resque job
+        # Deliver a forked child's own queued metrics before Resque exits and discards them.
         #
-        module ForkReset
+        module FlushOnExit
           class << self
             ##
             # @return [PrometheusExporter::Client]
@@ -30,34 +30,22 @@ module Bigcommerce
             attr_accessor :client
 
             ##
-            # @return [Integer]
+            # @return [Symbol|NilClass]
             #
-            attr_accessor :installed_in_pid
-
-            ##
-            # This can't rely on fork_per_job? as the deprecated Resque::Worker#process can be invoked directly
-            # fork_per_job? is evaluated based on the env var FORK_PER_JOB
-            # FORK_PER_JOB is truthy by default which makes the failure case more likely:
-            # 1. FORK_PER_JOB=1
-            # 2. Resque::Worker#process called directly
-            # This would lead to the parent and all sibling workers having their undelivered metrics discarded as
-            # Bigcommerce::Prometheus::Client  is a singleton with a single queue for metrics shared by the
-            # parent and workers in the same process
-            #
-            def reset_if_forked
-              return if installed_in_pid.nil? || Process.pid == installed_in_pid
-
-              client.reset_after_fork!
+            def flush
+              client.flush! if client.respond_to?(:flush!)
             end
           end
 
           ##
           # @param [Resque::Job] job
-          # @param [Proc] block
           #
           def perform(job, &block)
-            ForkReset.reset_if_forked
             super
+          ensure
+            # fork_per_job? is sufficient here as it will not result in data loss,
+            # in contrast with Bigcommerce::Prometheus::Integrations::Resque::ForkReset.reset_if_forked
+            FlushOnExit.flush if fork_per_job?
           end
         end
       end

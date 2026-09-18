@@ -3,6 +3,7 @@ Changelog for the bc-prometheus-ruby gem.
 ### Pending Release
 
 - Reset the Prometheus client in forked Resque children so the forked job doesn't also send the parent's metrics
+- Optionally deliver a forked Resque child's own queued metrics before the child exits. **Off by default**, enable it with `PROMETHEUS_RESQUE_FLUSH_ON_EXIT_ENABLED=1` and bound the flush time via `PROMETHEUS_CLIENT_FLUSH_TIMEOUT` which is 20ms by default.
 
 ## 0.9.0
 

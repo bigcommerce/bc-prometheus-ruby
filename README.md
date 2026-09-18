@@ -47,6 +47,17 @@ Bigcommerce::Prometheus::Instrumentors::Resque.new(app: Rails.application).start
 Resque runs each job in a forked child. The client is a singleton, so it must be reset and have its metrics queue 
 cleared after `fork` so the child doesn't resend the parent's metrics. 
 
+Pushing a metric only queues it. Delivery happens on a background thread. The child ends with `exit!`, which does
+not wait for that thread, so whatever is still queued is discarded. A job that pushes and returns loses the
+observation. A job that keeps working after pushing usually does not.
+
+### Flush on exit (opt-in)
+
+Set `PROMETHEUS_RESQUE_FLUSH_ON_EXIT_ENABLED=1` to have the child deliver its own queue on the calling thread
+before the job returns.
+It is off by default because it costs one request to the local collector for every observation a job records.
+Delivery is bounded by `PROMETHEUS_CLIENT_FLUSH_TIMEOUT`, 20ms by default.
+
 ### Per-job metrics (opt-in)
 
 Set `PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED=1` on Resque worker pods to enable two additional histograms recorded from the parent worker process.
@@ -89,6 +100,7 @@ After requiring the main file, you can further configure with:
 | process_name | What the current process name is (used in logging) | `"unknown"` | `ENV['PROCESS']` |
 | railtie_disabled | Opt out flag for Railtie; use `Bigcommerce::Prometheus::Instrumentors::Web.new(app: Rails.application).start` in your app's code to start it up yourself  | `0` | `ENV['PROMETHEUS_DISABLE_RAILTIE']` |
 | resque_per_job_metrics_enabled | Enable per-job queue-latency and perform-duration histograms (parent-side, no synchronous flush) | `0` | `ENV['PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED']` |
+| resque_flush_on_exit_enabled | Deliver a forked child's own queued metrics before Resque exits it | `0` | `ENV['PROMETHEUS_RESQUE_FLUSH_ON_EXIT_ENABLED']` |
 
 ## Custom Collectors
 
