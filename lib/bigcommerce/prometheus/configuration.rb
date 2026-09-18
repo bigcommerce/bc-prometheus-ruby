@@ -29,6 +29,7 @@ module Bigcommerce
         client_custom_labels: nil,
         client_max_queue_size: ENV.fetch('PROMETHEUS_CLIENT_MAX_QUEUE_SIZE', 10_000).to_i,
         client_thread_sleep: ENV.fetch('PROMETHEUS_CLIENT_THREAD_SLEEP', 0.5).to_f,
+        client_flush_timeout: ENV.fetch('PROMETHEUS_CLIENT_FLUSH_TIMEOUT', 0.02).to_f,
 
         # Integration configuration
         puma_collection_frequency: ENV.fetch('PROMETHEUS_PUMA_COLLECTION_FREQUENCY', 30).to_i,

@@ -21,6 +21,7 @@ describe Bigcommerce::Prometheus::Client do
   let(:client) { described_class.instance }
 
   let(:delivery) { client.instance_variable_get(:@delivery) }
+  let(:flush) { client.instance_variable_get(:@flush) }
 
   describe '#initialize' do
     subject { client }
@@ -79,6 +80,41 @@ describe Bigcommerce::Prometheus::Client do
     end
   end
 
+  describe '#flush!' do
+    let(:outcome) { Bigcommerce::Prometheus::Flush::Outcome.new(kind: :success) }
+
+    before { allow(flush).to receive(:call).and_return(outcome) }
+
+    it 'delivers on the calling thread and passes the outcome back to the caller' do
+      expect(client.flush!).to eq outcome
+    end
+
+    context 'when the outcome has a message' do
+      let(:outcome) { Bigcommerce::Prometheus::Flush::Outcome.new(kind: :error, message: 'dropping a message') }
+      let(:prometheus_logger) { instance_double(Logger, warn: nil) }
+
+      before { allow(Bigcommerce::Prometheus).to receive(:logger).and_return(prometheus_logger) }
+
+      it 'logs the outcome message, since Flush itself never logs' do
+        client.flush!
+
+        expect(prometheus_logger).to have_received(:warn).with(a_string_including('dropping a message'))
+      end
+    end
+
+    context 'when the outcome has no message' do
+      let(:prometheus_logger) { instance_double(Logger, warn: nil) }
+
+      before { allow(Bigcommerce::Prometheus).to receive(:logger).and_return(prometheus_logger) }
+
+      it 'logs nothing' do
+        client.flush!
+
+        expect(prometheus_logger).not_to have_received(:warn)
+      end
+    end
+  end
+
   describe '#uri_path' do
     it 'returns URL the delivery would post to' do
       expect(client.uri_path('/send-metrics')).to eq delivery.uri_path('/send-metrics')
@@ -132,6 +168,12 @@ describe Bigcommerce::Prometheus::Client do
       client.reset_after_fork!
       expect(client.instance_variable_get(:@delivery).instance_variable_get(:@queue))
         .to be client.instance_variable_get(:@queue)
+    end
+
+    it 'replaces the flush, so it wraps the replacement delivery rather than the parent\'s' do
+      original = client.instance_variable_get(:@flush)
+      client.reset_after_fork!
+      expect(client.instance_variable_get(:@flush)).not_to be original
     end
   end
 end

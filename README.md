@@ -81,6 +81,7 @@ After requiring the main file, you can further configure with:
 | client_custom_labels | A hash of custom labels to send with each client request | `{}` | None |
 | client_max_queue_size | The max amount of metrics to send before flushing | `10000` | `ENV['PROMETHEUS_CLIENT_MAX_QUEUE_SIZE']` |
 | client_thread_sleep | How often to sleep the worker thread that manages the client buffer (seconds) | `0.5` | `ENV['PROMETHEUS_CLIENT_THREAD_SLEEP']` |
+| client_flush_timeout | Total a synchronous flush will spend before abandoning what is queued (seconds) | `0.02` | `ENV['PROMETHEUS_CLIENT_FLUSH_TIMEOUT']` |
 | puma_collection_frequency | How often to poll puma collection metrics (seconds) | `30` | `ENV['PROMETHEUS_PUMA_COLLECTION_FREQUENCY']` |
 | server_host | The host to run the exporter on | `"0.0.0.0"` | `ENV['PROMETHEUS_SERVER_HOST']` |
 | server_port | The port to run the exporter on | `9394` | `ENV['PROMETHEUS_SERVER_PORT']` |

@@ -42,6 +42,7 @@ module Bigcommerce
         PrometheusExporter::Client.default = self
         @process_name = process_name || ::Bigcommerce::Prometheus.process_name
         @delivery = build_delivery
+        @flush = build_flush
       end
 
       ##
@@ -87,11 +88,21 @@ module Bigcommerce
         @delivery.process_queue
       end
 
+      def flush!
+        outcome = @flush.call
+        if outcome.message
+          context = outcome.context.map { |k, v| "#{k}=#{v}" }.join(' ')
+          logger.warn "[bigcommerce-prometheus][#{@process_name}] #{outcome.message} #{context}".strip
+        end
+        outcome
+      end
+
       def reset_after_fork!
         @queue = Queue.new
         @worker_thread = nil
         @mutex = Mutex.new
         @delivery = build_delivery
+        @flush = build_flush
       end
 
       private
@@ -101,6 +112,10 @@ module Bigcommerce
       #
       def build_delivery
         Delivery.new(queue: @queue, host: @host, port: @port)
+      end
+
+      def build_flush
+        Flush.new(delivery: @delivery, timeout: ::Bigcommerce::Prometheus.client_flush_timeout)
       end
     end
   end
