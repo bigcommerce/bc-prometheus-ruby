@@ -16,14 +16,15 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 require 'spec_helper'
+require 'resque'
 
 # Classification only: which payload class .for builds for each wire shape.
 # The field extraction behaviour of each class is covered in
 # active_job_payload_spec.rb and vanilla_resque_payload_spec.rb.
 
 describe Bigcommerce::Prometheus::Integrations::Resque::JobPayload do
-  def resque_job_double(payload)
-    double('Resque::Job', payload: payload)
+  def resque_job(payload, queue = 'default')
+    Resque::Job.new(queue, payload)
   end
 
   def active_job_payload(job_class: 'MyJob', enqueued_at: nil, scheduled_at: nil)
@@ -42,46 +43,46 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobPayload do
 
   describe '.for' do
     it 'builds an ActiveJobPayload for an ActiveJob-shaped payload' do
-      payload = described_class.for(resque_job_double(active_job_payload))
+      payload = described_class.for(resque_job(active_job_payload))
 
       expect(payload).to be_a(Bigcommerce::Prometheus::Integrations::Resque::ActiveJobPayload)
     end
 
     it 'labels by the inner job_class, never the JobWrapper class' do
-      payload = described_class.for(resque_job_double(active_job_payload(job_class: 'BigPay::InnerJob')))
+      payload = described_class.for(resque_job(active_job_payload(job_class: 'BigPay::InnerJob')))
 
       expect(payload.job_class).to eq('BigPay::InnerJob')
     end
 
     it 'builds a VanillaResquePayload for a vanilla payload (primitive args)' do
       payload = described_class.for(
-        resque_job_double('class' => 'BigPay::EnablePpcpJob', 'args' => [12_345, 'some_string'])
+        resque_job('class' => 'BigPay::EnablePpcpJob', 'args' => [12_345, 'some_string'])
       )
 
       expect(payload).to be_a(Bigcommerce::Prometheus::Integrations::Resque::VanillaResquePayload)
     end
 
     it 'builds a VanillaResquePayload when args is empty' do
-      payload = described_class.for(resque_job_double('class' => 'BigPay::EmptyJob', 'args' => []))
+      payload = described_class.for(resque_job('class' => 'BigPay::EmptyJob', 'args' => []))
 
       expect(payload).to be_a(Bigcommerce::Prometheus::Integrations::Resque::VanillaResquePayload)
     end
 
     it 'builds a VanillaResquePayload when args is missing' do
-      payload = described_class.for(resque_job_double('class' => 'BigPay::EmptyJob'))
+      payload = described_class.for(resque_job('class' => 'BigPay::EmptyJob'))
 
       expect(payload).to be_a(Bigcommerce::Prometheus::Integrations::Resque::VanillaResquePayload)
     end
 
     it 'builds a VanillaResquePayload when args is not an Array' do
-      payload = described_class.for(resque_job_double('class' => 'BigPay::WeirdJob', 'args' => 'not an array'))
+      payload = described_class.for(resque_job('class' => 'BigPay::WeirdJob', 'args' => 'not an array'))
 
       expect(payload).to be_a(Bigcommerce::Prometheus::Integrations::Resque::VanillaResquePayload)
     end
 
     it 'builds a VanillaResquePayload when args[0] is a Hash without a job_class' do
       payload = described_class.for(
-        resque_job_double('class' => 'BigPay::HashArgJob', 'args' => [{ 'enqueued_at' => Time.now.iso8601 }])
+        resque_job('class' => 'BigPay::HashArgJob', 'args' => [{ 'enqueued_at' => Time.now.iso8601 }])
       )
 
       expect(payload).to be_a(Bigcommerce::Prometheus::Integrations::Resque::VanillaResquePayload)
@@ -89,26 +90,26 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobPayload do
 
     it 'builds a VanillaResquePayload when the inner job_class is nil (no nil labels)' do
       payload = described_class.for(
-        resque_job_double('class' => 'BigPay::HashArgJob', 'args' => [{ 'job_class' => nil }])
+        resque_job('class' => 'BigPay::HashArgJob', 'args' => [{ 'job_class' => nil }])
       )
 
       expect(payload).to be_a(Bigcommerce::Prometheus::Integrations::Resque::VanillaResquePayload)
     end
 
     it "builds a VanillaResquePayload when the job's payload is nil" do
-      payload = described_class.for(resque_job_double(nil))
+      payload = described_class.for(resque_job(nil))
 
       expect(payload).to be_a(Bigcommerce::Prometheus::Integrations::Resque::VanillaResquePayload)
     end
 
     it 'builds a VanillaResquePayload when the payload is not a Hash' do
-      payload = described_class.for(resque_job_double('not a hash'))
+      payload = described_class.for(resque_job('not a hash'))
 
       expect(payload).to be_a(Bigcommerce::Prometheus::Integrations::Resque::VanillaResquePayload)
     end
 
     it "normalizes a non-Hash payload so the label falls back to 'unknown'" do
-      expect(described_class.for(resque_job_double(nil)).job_class).to eq('unknown')
+      expect(described_class.for(resque_job(nil)).job_class).to eq('unknown')
     end
 
     it "returns a VanillaResquePayload labelled 'unknown' when payload access raises" do

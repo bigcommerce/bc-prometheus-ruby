@@ -16,19 +16,7 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 require 'spec_helper'
-
-# NOTE: this spec deliberately does not `require 'resque'`. Pulling Resque
-# into this gem's dev bundle conflicts with the gemspec's `rack >= 3.0`
-# requirement (Resque -> sinatra (old) -> rack < 3 under cold bundle
-# resolution). See the PR description for the testing-gap implications.
-#
-# The record_* examples test the pure logic in JobMetrics (anchor selection,
-# payload unwrapping, label assembly, error rescue) by injecting a client
-# directly via `instance_variable_set(:@client, ...)`. The `.start` examples
-# cover the env-var gating and the idempotent prepend against a stubbed
-# `Resque::Worker` via `stub_const`; behaviour against the real Resque::Worker
-# remains untested until Resque can be added to the dev bundle (blocked on
-# bumping the Sinatra dep — see follow-up).
+require 'resque'
 
 describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
   let(:client) { instance_double(PrometheusExporter::Client, send_json: nil) }
@@ -44,10 +32,8 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
     described_class.instance_variable_set(:@client, nil)
   end
 
-  # A minimal stand-in for Resque::Job — the production code only ever calls
-  # `.payload` on it, so a plain double is sufficient.
-  def resque_job_double(payload)
-    double('Resque::Job', payload: payload)
+  def resque_job(payload, queue = 'default')
+    Resque::Job.new(queue, payload)
   end
 
   # Build a real payload object from a payload hash. Both record_* methods
@@ -55,7 +41,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
   # job via JobPayload.for and shares between the two recordings;
   # classification and parsing edge cases are covered in the payload specs.
   def payload_for(payload_hash)
-    Bigcommerce::Prometheus::Integrations::Resque::JobPayload.for(resque_job_double(payload_hash))
+    Bigcommerce::Prometheus::Integrations::Resque::JobPayload.for(resque_job(payload_hash))
   end
 
   def active_job_payload(job_class: 'MyJob', enqueued_at: nil, scheduled_at: nil)
@@ -181,7 +167,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
     end
 
     it 'records a measured perform duration around super' do
-      worker_class.new.perform_with_fork(resque_job_double('class' => 'RawResqueJob', 'args' => []))
+      worker_class.new.perform_with_fork(resque_job('class' => 'RawResqueJob', 'args' => []))
 
       expect(client).to have_received(:send_json).with(
         hash_including(metric: 'perform_duration', value: a_value_within(0.05).of(0.0),
@@ -194,20 +180,16 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
         allow(Bigcommerce::Prometheus::Integrations::Resque::JobPayload).to receive(:for).and_raise(NoMemoryError)
 
         expect do
-          worker_class.new.perform_with_fork(resque_job_double({}))
+          worker_class.new.perform_with_fork(resque_job({}))
         end.to raise_error(NoMemoryError)
       end
     end
   end
 
   describe '.start' do
-    let(:worker_class) do
-      Class.new do
-        private
-
-        def perform_with_fork(_job, &_block); end
-      end
-    end
+    # .start involves prepending which can't be undone. We stub Worker with a throwaway
+    # subclass instead so the changes don't affect later tests.
+    let(:worker_class) { Class.new(::Resque::Worker) }
 
     before do
       stub_const('Resque::Worker', worker_class)
