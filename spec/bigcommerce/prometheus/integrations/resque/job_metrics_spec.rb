@@ -20,6 +20,7 @@ require 'resque'
 
 describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
   let(:client) { instance_double(PrometheusExporter::Client, send_json: nil) }
+  let(:queue_name) { 'default' }
 
   before do
     # Inject the client directly so each example exercises the record_* logic
@@ -32,7 +33,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
     described_class.instance_variable_set(:@client, nil)
   end
 
-  def resque_job(payload, queue = 'default')
+  def resque_job(payload, queue = queue_name)
     Resque::Job.new(queue, payload)
   end
 
@@ -71,10 +72,10 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
         type: 'resque_job',
         metric: 'queue_latency',
         value: a_value_within(0.5).of(3),
-        custom_labels: { job_class: 'MyJob' }
+        custom_labels: { job_class: 'MyJob', queue: queue_name }
       )
 
-      described_class.record_queue_latency(payload_for(active_job_payload(enqueued_at: enqueued)))
+      described_class.record_queue_latency(payload_for(active_job_payload(enqueued_at: enqueued)), queue: queue_name)
     end
 
     it 'clamps the value to zero when the anchor is in the future (clock skew)' do
@@ -84,7 +85,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
         hash_including(metric: 'queue_latency', value: 0.0)
       )
 
-      described_class.record_queue_latency(payload_for(active_job_payload(enqueued_at: future)))
+      described_class.record_queue_latency(payload_for(active_job_payload(enqueued_at: future)), queue: queue_name)
     end
 
     it 'is a no-op for a vanilla Resque payload (no anchor available, no exception)' do
@@ -93,7 +94,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
       expect(client).not_to receive(:send_json)
 
       expect do
-        described_class.record_queue_latency(payload_for(payload))
+        described_class.record_queue_latency(payload_for(payload), queue: queue_name)
       end.not_to raise_error
     end
 
@@ -104,7 +105,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
 
         expect do
           described_class.record_queue_latency(
-            payload_for(active_job_payload(enqueued_at: Time.now.iso8601(6)))
+            payload_for(active_job_payload(enqueued_at: Time.now.iso8601(6))), queue: queue_name
           )
         end.not_to raise_error
       end
@@ -121,25 +122,49 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
         type: 'resque_job',
         metric: 'perform_duration',
         value: a_value_within(0.05).of(0.42),
-        custom_labels: { job_class: 'MyJob' }
+        custom_labels: { job_class: 'MyJob', queue: queue_name }
       )
 
-      described_class.record_perform_duration(payload_for(active_job_payload), monotonic_now - 0.42)
+      described_class.record_perform_duration(payload_for(active_job_payload), monotonic_now - 0.42, queue: queue_name)
     end
 
     it 'labels with the raw Resque payload class for vanilla Resque jobs' do
       payload = { 'class' => 'RawResqueJob', 'args' => [12_345, 'some_string'] }
 
       expect(client).to receive(:send_json).with(
-        hash_including(custom_labels: { job_class: 'RawResqueJob' })
+        hash_including(custom_labels: { job_class: 'RawResqueJob', queue: queue_name })
       )
 
-      described_class.record_perform_duration(payload_for(payload), monotonic_now)
+      described_class.record_perform_duration(payload_for(payload), monotonic_now, queue: queue_name)
+    end
+
+    it 'coerces a Symbol queue, so it cannot key a second histogram entry that renders identically' do
+      expect(client).to receive(:send_json).with(
+        hash_including(custom_labels: { job_class: 'MyJob', queue: 'scheduled_action' })
+      )
+
+      described_class.record_perform_duration(payload_for(active_job_payload), monotonic_now, queue: :scheduled_action)
+    end
+
+    it "falls back to 'unknown' when the queue is nil" do
+      expect(client).to receive(:send_json).with(
+        hash_including(custom_labels: { job_class: 'MyJob', queue: 'unknown' })
+      )
+
+      described_class.record_perform_duration(payload_for(active_job_payload), monotonic_now, queue: nil)
+    end
+
+    it "falls back to 'unknown' when the queue is blank" do
+      expect(client).to receive(:send_json).with(
+        hash_including(custom_labels: { job_class: 'MyJob', queue: 'unknown' })
+      )
+
+      described_class.record_perform_duration(payload_for(active_job_payload), monotonic_now, queue: '')
     end
 
     it 'rescues a nil started_at instead of raising into the caller ensure block' do
       expect do
-        described_class.record_perform_duration(payload_for(active_job_payload), nil)
+        described_class.record_perform_duration(payload_for(active_job_payload), nil, queue: queue_name)
       end.not_to raise_error
     end
 
@@ -149,7 +174,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
         expect(Bigcommerce::Prometheus.logger).to receive(:warn).with(/perform_duration push failed: boom/)
 
         expect do
-          described_class.record_perform_duration(payload_for(active_job_payload), monotonic_now)
+          described_class.record_perform_duration(payload_for(active_job_payload), monotonic_now, queue: queue_name)
         end.not_to raise_error
       end
     end
@@ -171,7 +196,7 @@ describe Bigcommerce::Prometheus::Integrations::Resque::JobMetrics do
 
       expect(client).to have_received(:send_json).with(
         hash_including(metric: 'perform_duration', value: a_value_within(0.05).of(0.0),
-                       custom_labels: { job_class: 'RawResqueJob' })
+                       custom_labels: { job_class: 'RawResqueJob', queue: queue_name })
       )
     end
 

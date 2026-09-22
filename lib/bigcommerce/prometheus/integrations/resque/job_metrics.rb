@@ -25,7 +25,8 @@ module Bigcommerce
         # Queue latency is captured before super, perform duration after.
         #
         # Off unless PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED=1
-        # Emits one histogram observation per job per worker process, which can be high cardinality at scale.
+        # Emits one histogram observation per job per worker process, labelled by job_class and by
+        # the job's queue, which can be high cardinality at scale.
         #
         # NOTE: queue_latency is supported for jobs enqueued via ActiveJob
         # The gem reads three fields from
@@ -80,8 +81,9 @@ module Bigcommerce
             # Falls back to enqueued_at if scheduled_at isn't present.
             #
             # @param [ActiveJobPayload, VanillaResquePayload] payload
+            # @param [String, Symbol, nil] queue the queue the job was pulled from
             #
-            def record_queue_latency(payload)
+            def record_queue_latency(payload, queue:)
               anchor = payload.anchor_time
               return unless anchor
 
@@ -93,7 +95,7 @@ module Bigcommerce
                 type: 'resque_job',
                 metric: 'queue_latency',
                 value: latency,
-                custom_labels: { job_class: payload.job_class }
+                custom_labels: { job_class: payload.job_class, queue: queue_label(queue) }
               )
             rescue StandardError => e
               ::Bigcommerce::Prometheus.logger&.warn(
@@ -111,13 +113,14 @@ module Bigcommerce
             #
             # @param [ActiveJobPayload, VanillaResquePayload] payload
             # @param [Float] started_at monotonic timestamp taken just before the fork
+            # @param [String, Symbol, nil] queue the queue the job was pulled from
             #
-            def record_perform_duration(payload, started_at)
+            def record_perform_duration(payload, started_at, queue:)
               @client.send_json(
                 type: 'resque_job',
                 metric: 'perform_duration',
                 value: Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at,
-                custom_labels: { job_class: payload.job_class }
+                custom_labels: { job_class: payload.job_class, queue: queue_label(queue) }
               )
             rescue StandardError => e
               ::Bigcommerce::Prometheus.logger&.warn(
@@ -126,6 +129,18 @@ module Bigcommerce
             end
 
             private
+
+            ##
+            # Normalises the queue into a label value and falls back to 'unknown' rather than nil so the
+            # label is always present.
+            #
+            # @param [String, Symbol, nil] queue
+            # @return [String]
+            #
+            def queue_label(queue)
+              label = queue.to_s
+              label.empty? ? 'unknown' : label
+            end
 
             def install_hooks
               return if @hooks_installed
@@ -174,11 +189,11 @@ module Bigcommerce
           module WorkerInstrumentation
             def perform_with_fork(job, &block)
               payload = JobPayload.for(job)
-              JobMetrics.record_queue_latency(payload)
+              JobMetrics.record_queue_latency(payload, queue: job.queue)
               started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
               super
             ensure
-              JobMetrics.record_perform_duration(payload, started_at)
+              JobMetrics.record_perform_duration(payload, started_at, queue: job.queue)
             end
           end
         end
