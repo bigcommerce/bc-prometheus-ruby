@@ -3,6 +3,7 @@ Changelog for the bc-prometheus-ruby gem.
 ### Pending Release
 
 - Reset the Prometheus client in forked Resque children so the forked job doesn't also send the parent's metrics
+- Add a `queue` label to `resque_job_queue_latency_seconds` and `resque_job_perform_duration_seconds` so per-job metrics can be grouped by queue instead of by a set of job classes
 
 ## 0.9.0
 
