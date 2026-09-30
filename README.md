@@ -54,7 +54,7 @@ Set `PROMETHEUS_RESQUE_PER_JOB_METRICS_ENABLED=1` on Resque worker pods to enabl
 - `resque_job_queue_latency_seconds{job_class,queue}` — time from `scheduled_at` (falling back to `enqueued_at`) until a worker picks the job up. Per attempt; retries-with-backoff anchor on `scheduled_at` so the intentional backoff doesn't show as latency.
 - `resque_job_perform_duration_seconds{job_class,queue}` — total Resque child lifetime (fork → `Process.waitpid` return). Includes fork overhead, Redis reconnect, after_fork hooks, perform, and exit.
 
-These are off by default because they emit one histogram observation per job per worker pod, which adds cardinality. Opt in per service.
+These are off by default because they emit one histogram observation per job per queue per worker pod, which adds cardinality. Opt in per service.
 
 `resque_job_queue_latency_seconds` is supported for jobs enqueued via ActiveJob (`.perform_later`) — the enqueue timestamps come from ActiveJob's serialized payload, and the `job_class` label is the user's job class name, not `ActiveJob::QueueAdapters::ResqueAdapter::JobWrapper`. 
 `scheduled_at` is serialized by ActiveJob from Rails 7.1; on older Rails the payload carries only `enqueued_at`, so intentional scheduling/backoff delay counts toward queue latency. 
