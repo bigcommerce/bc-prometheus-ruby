@@ -21,6 +21,7 @@ describe Bigcommerce::Prometheus::Client do
   let(:client) { described_class.instance }
 
   let(:delivery) { client.instance_variable_get(:@delivery) }
+  let(:flush) { client.instance_variable_get(:@flush) }
 
   describe '#initialize' do
     subject { client }
@@ -66,8 +67,88 @@ describe Bigcommerce::Prometheus::Client do
     end
   end
 
+  describe '#worker_loop' do
+    let(:prometheus_logger) { instance_double(Logger, warn: nil) }
+    let(:error) { StandardError.new('collector unreachable') }
+
+    before do
+      allow(client).to receive(:close_socket_if_old!)
+      allow(delivery).to receive(:process_queue).and_raise(error)
+      allow(Bigcommerce::Prometheus).to receive(:logger).and_return(prometheus_logger)
+    end
+
+    it 'logs the error message when delivery fails' do
+      client.worker_loop
+
+      expect(prometheus_logger).to have_received(:warn).with(a_string_including('collector unreachable'))
+    end
+
+    it 'names the exception class, since this rescues any StandardError and not only a delivery failure' do
+      client.worker_loop
+
+      expect(prometheus_logger).to have_received(:warn).with(a_string_including('StandardError'))
+    end
+
+    context 'when the error carries a backtrace' do
+      let(:error) do
+        StandardError.new('collector unreachable').tap do |e|
+          e.set_backtrace(["#{__FILE__}:1:in `a_named_frame`"])
+        end
+      end
+
+      it 'logs it, so an error whose message does not identify its origin can still be traced' do
+        client.worker_loop
+
+        expect(prometheus_logger).to have_received(:warn).with(a_string_including('a_named_frame'))
+      end
+    end
+
+    context 'when the error carries no backtrace' do
+      before { allow(error).to receive(:backtrace).and_return(nil) }
+
+      it 'still logs, rather than raising out of the rescue that keeps the worker thread alive' do
+        expect { client.worker_loop }.not_to raise_error
+      end
+    end
+  end
+
+  describe '#flush!' do
+    let(:outcome) { Bigcommerce::Prometheus::Flush::Outcome.new(kind: :success) }
+
+    before { allow(flush).to receive(:call).and_return(outcome) }
+
+    it 'delivers on the calling thread and passes the outcome back to the caller' do
+      expect(client.flush!).to eq outcome
+    end
+
+    context 'when the outcome has a message' do
+      let(:outcome) { Bigcommerce::Prometheus::Flush::Outcome.new(kind: :error, message: 'dropping a message') }
+      let(:prometheus_logger) { instance_double(Logger, warn: nil) }
+
+      before { allow(Bigcommerce::Prometheus).to receive(:logger).and_return(prometheus_logger) }
+
+      it 'logs the outcome message, since Flush itself never logs' do
+        client.flush!
+
+        expect(prometheus_logger).to have_received(:warn).with(a_string_including('dropping a message'))
+      end
+    end
+
+    context 'when the outcome has no message' do
+      let(:prometheus_logger) { instance_double(Logger, warn: nil) }
+
+      before { allow(Bigcommerce::Prometheus).to receive(:logger).and_return(prometheus_logger) }
+
+      it 'logs nothing' do
+        client.flush!
+
+        expect(prometheus_logger).not_to have_received(:warn)
+      end
+    end
+  end
+
   describe '#uri_path' do
-    it 'answers the collector URL the delivery would post to' do
+    it 'returns URL the delivery would post to' do
       expect(client.uri_path('/send-metrics')).to eq delivery.uri_path('/send-metrics')
     end
   end
@@ -109,7 +190,7 @@ describe Bigcommerce::Prometheus::Client do
       expect(client.instance_variable_get(:@mutex)).not_to be_locked
     end
 
-    it 'replaces the delivery, so the child does not inherit the queue behind it' do
+    it 'replaces the delivery, so the child does not inherit the lock or the queue behind it' do
       original = client.instance_variable_get(:@delivery)
       client.reset_after_fork!
       expect(client.instance_variable_get(:@delivery)).not_to be original
@@ -119,6 +200,12 @@ describe Bigcommerce::Prometheus::Client do
       client.reset_after_fork!
       expect(client.instance_variable_get(:@delivery).instance_variable_get(:@queue))
         .to be client.instance_variable_get(:@queue)
+    end
+
+    it 'replaces the flush, so it wraps the replacement delivery rather than the parent\'s' do
+      original = client.instance_variable_get(:@flush)
+      client.reset_after_fork!
+      expect(client.instance_variable_get(:@flush)).not_to be original
     end
   end
 end

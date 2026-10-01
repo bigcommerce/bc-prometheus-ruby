@@ -18,32 +18,46 @@
 module Bigcommerce
   module Prometheus
     ##
-    # Sends the queued metrics to the collector.
+    # Sends the metrics to the collector
     #
     class Delivery
-      include Loggable
-
       ##
-      # @param [Queue] queue the data structure metrics are pushed onto.
-      # @param [String] host the collector host.
-      # @param [Integer] port the collector port.
-      # @param [String] process_name
+      # Error sending to collector
       #
-      def initialize(queue:, host:, port:, process_name:)
+      class PostFailed < StandardError
+        attr_reader :cause, :sent, :undelivered, :uri_path
+
+        def initialize(cause:, sent:, undelivered:, uri_path:)
+          @cause = cause
+          @sent = sent
+          @undelivered = undelivered
+          @uri_path = uri_path
+          super(build_message)
+        end
+
+        private
+
+        def build_message
+          base = "dropping a message to #{uri_path}: #{cause}"
+          undelivered.positive? ? "#{base} (#{undelivered} more left undelivered)" : base
+        end
+      end
+
+      def initialize(queue:, host:, port:)
         @queue = queue
         @host = host
         @port = port
-        @process_name = process_name
+        @delivery_mutex = Mutex.new
       end
 
       def process_queue
-        drain
+        @delivery_mutex.synchronize { drain }
       end
 
-      ##
-      # @param [String] path appended to the collector's base URL.
-      # @return [Module<URI>]
-      #
+      def queue_size
+        @queue.size
+      end
+
       def uri_path(path)
         URI("http://#{@host}:#{@port}#{path}")
       end
@@ -51,32 +65,20 @@ module Bigcommerce
       private
 
       def drain
+        sent = 0
         while @queue.length.to_i.positive?
           begin
             post_message(@queue.pop)
+            sent += 1
           rescue StandardError => e
-            report("Prometheus Exporter is dropping a message to #{uri_path('/send-metrics')}: #{e}")
-            raise
+            raise PostFailed.new(cause: e, sent: sent, undelivered: @queue.size, uri_path: uri_path('/send-metrics'))
           end
         end
+        sent.zero? ? :empty : :success
       end
 
-      ##
-      # @param [String] message
-      #
       def post_message(message)
         ::Net::HTTP.post(uri_path('/send-metrics'), message)
-      end
-
-      ##
-      # @param [String] message
-      #
-      def report(message)
-        logger.warn "[bigcommerce-prometheus][#{@process_name}] #{message}"
-        $stdout.flush
-        $stderr.flush
-      rescue StandardError
-        nil
       end
     end
   end
